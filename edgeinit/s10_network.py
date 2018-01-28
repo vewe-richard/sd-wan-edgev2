@@ -47,7 +47,12 @@ class Main(MainBase):
             sp = subprocess.run(["ip", "link", "set", si, "master", brname])
             if sp.returncode != 0:
                 self._logger.error("Can not add interface to bridge")
+            sp = subprocess.run(["ip", "link", "set", si, "up"])
         sp = subprocess.run(["ip", "link", "set", brname, "up"])
+        sp = subprocess.run(["ip", "address", "add", "192.168.2.1/24", "dev", brname])
+        sp = subprocess.run(["systemctl", "restart", "isc-dhcp-server"])
+        sp = subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "usb0", "-j", "MASQUERADE"])
+        sp = subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "fm1-mac9", "-j", "MASQUERADE"])
         pass
 
     def post(self, msg):
