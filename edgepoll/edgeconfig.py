@@ -28,6 +28,8 @@ class EdgeConfig:
             self._config["sw"]
             self._config["sms"]
             self._config["smsport"]
+            self._config["publicip"]
+            self._config["inputport"]
         except Exception as e:
             raise Exception("Wrong edge config file: " + configfile)
 
@@ -55,3 +57,6 @@ class EdgeConfig:
 
     def logger(self):
         return self._logger
+
+    def inputport(self):
+        return self._config["inputport"]
