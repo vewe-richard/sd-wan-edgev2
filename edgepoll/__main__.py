@@ -18,6 +18,8 @@ from getopt import getopt
 import logging
 from edgepoll.edgeconfig import EdgeConfig
 import subprocess
+from multiprocessing import Queue
+from edgepoll import input, execute
 
 def usage():
     print("")
@@ -78,3 +80,20 @@ if __name__ == "__main__":
     #logfile
     logger = logsetup(logfile, loglevel)
     EdgeConfig.getInstance().setlogger(logger)
+
+    #
+    inputQueue = Queue()
+    inputs = input.inputInit(inputQueue)
+    pexecute = execute.executeInit(inputQueue)
+    for ipt in inputs:
+        ipt.join()
+    pexecute.join()
+
+
+
+
+
+
+
+
+
