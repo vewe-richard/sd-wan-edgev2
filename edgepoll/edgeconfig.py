@@ -49,3 +49,9 @@ class EdgeConfig:
         except Exception as e:
             raise Exception("Can not get git commit number")
         self._edgeversion["commit"] = commit
+
+    def setlogger(self, logger):
+        self._logger = logger
+
+    def logger(self):
+        return self._logger

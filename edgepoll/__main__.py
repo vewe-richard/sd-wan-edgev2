@@ -5,7 +5,7 @@
 #   ExecStart=/usr/bin/python3 {GITROOT}/edgepoll/__main__.py --log=/var/log/sdwan/edge/edge.log
 #   Environment=PYTHONPATH="{GITROOT}"
 # 2. On shell
-#   export PYTHONPATH="$GITROOT" &&  python3 edgepoll/__main__.py --config="./config.json"
+#   export PYTHONPATH="$GITROOT" &&  python3 edgepoll/__main__.py --config="./config.json" --loglevel=10
 # 3. On Pycharm
 #   --config="./config.json"
 # By vewe-richard@github, 2020/01/10
@@ -17,6 +17,7 @@ from edgeutils import utils
 from getopt import getopt
 import logging
 from edgepoll.edgeconfig import EdgeConfig
+import subprocess
 
 def usage():
     print("")
@@ -28,6 +29,21 @@ def usage():
     print("")
     print("\tconfig: configfile, default is /etc/sdwan/edge/config.json if not specified")
     print("")
+
+def logsetup(logfile, loglevel):
+    logger = logging.getLogger("edgepoll")
+
+    if logfile == None:
+        logging.basicConfig(level=loglevel, format="%(levelname)s:\t%(message)s")
+    else:
+        subprocess.run(["mkdir", "-p", os.path.dirname(logfile)])
+        handler = logging.FileHandler(logfile)
+        logging.basicConfig(level=loglevel)
+        handler.setLevel(loglevel)
+        formater = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        handler.setFormatter(formater)
+        logger.addHandler(handler)
+    return logger
 
 if __name__ == "__main__":
     # to be sure current working directory is root of git project
@@ -57,3 +73,8 @@ if __name__ == "__main__":
     #! configfile
     EdgeConfig.getInstance().loadconfig(configfile)
     EdgeConfig.getInstance().loadedgeversion()
+    # Any more pre-run environment checking can be add here
+
+    #logfile
+    logger = logsetup(logfile, loglevel)
+    EdgeConfig.getInstance().setlogger(logger)
