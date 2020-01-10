@@ -1,0 +1,10 @@
+[Unit]
+Description=SD-WAN Edge poll service.
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 {GITROOT}/edge-poll/__main__.py
+Environment=PYTHONPATH="{GITROOT}"
+
+[Install]
+WantedBy=multi-user.target
