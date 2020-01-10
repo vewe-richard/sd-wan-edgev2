@@ -3,7 +3,7 @@ Description=SD-WAN Edge poll service.
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 {GITROOT}/edge-poll/__main__.py
+ExecStart=/usr/bin/python3 {GITROOT}/edgepoll/__main__.py --log=/var/log/sdwan/edge/edge.log
 Environment=PYTHONPATH="{GITROOT}"
 
 [Install]

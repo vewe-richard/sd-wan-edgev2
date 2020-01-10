@@ -1,0 +1,11 @@
+{
+  "sn": "00010001",
+  "type": "fatedge",
+  "name": "sz-fatedge",
+  "spec": "baicells-sd-wan-fatedge.hw.v01",
+  "sw": "fatedge.v01",
+  "sms": "10.27.1.1",
+  "smsport": 8080
+}
+
+
