@@ -49,11 +49,13 @@ def logsetup(logfile, loglevel):
 
 if __name__ == "__main__":
     # to be sure current working directory is root of git project
+    print("Checking working directory ...")
     cwd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     assert utils.runningUnderGitProjectRootDirectory(cwd)
     os.chdir(cwd)
 
     #input parameters
+    print("Parse input parameters ...")
     opts, args = getopt(sys.argv[1:], "-h", ["log=", "loglevel=", "config=", "help"])
 
     logfile = None #default is stdout
@@ -73,21 +75,40 @@ if __name__ == "__main__":
 
     #check parameters
     #! configfile
+    print("Load config and edgeversion ...")
     EdgeConfig.getInstance().loadconfig(configfile)
     EdgeConfig.getInstance().loadedgeversion()
     # Any more pre-run environment checking can be add here
 
     #logfile
+    print("Setup logger ...")
     logger = logsetup(logfile, loglevel)
     EdgeConfig.getInstance().setlogger(logger)
 
     #
+    print("Start input and execute child processes ...")
     inputQueue = Queue()
-    inputs = input.inputInit(inputQueue)
-    pexecute = execute.executeInit(inputQueue)
+    mainQueue = Queue()
+    inputs = input.inputInit(inputQueue, mainQueue)
+    pexecute = execute.executeInit(inputQueue, mainQueue)
+
+    while True:
+        msg = mainQueue.get()
+        if "kill" in msg:
+            print("Got kill message ...")
+            break
+
+    print("Terminate all child processes")
+    for ipt in inputs:
+        ipt.terminate()
+    pexecute.terminate()
+
+    print("Join all child processes ...")
     for ipt in inputs:
         ipt.join()
     pexecute.join()
+
+    print("Exit edgepoll")
 
 
 
