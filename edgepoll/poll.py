@@ -1,60 +1,60 @@
-from multiprocessing import Process
+from multiprocessing import Process, Lock
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from io import BytesIO
 from edgepoll.edgeconfig import EdgeConfig
 import traceback
+from edgeutils import utils
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    _inputQueue = None
-
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b'Hello, world!')
+    _lock = None
 
     def do_POST(self):
-        try:
-            logger = EdgeConfig.getInstance().logger()
-            logger.info("Begin input httpserver process ...")
-
-            self.mypost()
-        except Exception as e:
-            logger = EdgeConfig.getInstance().logger()
-            logger.error(traceback.format_exc())
-
-
-    def mypost(self):
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
-        self.send_response(200)
+        if "pollnotify" in body.decode():
+            self.send_response(200)
         self.end_headers()
-        response = BytesIO()
-        response.write(b'This is POST request. ')
-        response.write(b'Received: ')
-        response.write(body)
-        self._inputQueue.put(body)
-        self.wfile.write(response.getvalue())
+        self._lock.release()
+#        response = BytesIO()
+#        response.write(b'OK')
+#        self.wfile.write(response.getvalue())
 
 
-def httpInput(inputQueue, mainQueue):
+def notifypoll(logger, lock):
+    logger.info("Begin httpserver to wait poll notify ...")
+
+    SimpleHTTPRequestHandler._lock = lock
+    httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
+    httpd.serve_forever()
+
+
+def poll(logger):
+    lock = Lock()
+    lock.acquire()
+    notifytask = Process(target=notifypoll, args=(logger, lock))
+    notifytask.start()
+
     try:
-        logger = EdgeConfig.getInstance().logger()
-        logger.info("Begin input httpserver process ...")
-
-        SimpleHTTPRequestHandler._inputQueue = inputQueue
-        httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
-        httpd.serve_forever()
+        _poll(logger, lock)
     except Exception as e:
-        logger = EdgeConfig.getInstance().logger()
         logger.error(traceback.format_exc())
         traceback.print_exc()
     finally:
-        mainQueue.put("kill")
+        notifytask.terminate()
 
-
-def inputInit(inputQueue, mainQueue):
-    p1 = Process(target=httpInput, args=(inputQueue, mainQueue))
-    p1.start()
-    return [p1]
+def _poll(logger, lock):
+    timeout = EdgeConfig.getInstance().timeout()
+    ec = EdgeConfig.getInstance()
+    while True:
+        released = lock.acquire(block=True, timeout=timeout)
+        if released:
+            logger.debug("got message")
+        else:
+            logger.debug("timeout")
+        try:
+            resp = utils.http_post(ec.sms(), ec.smsport(), "/", {"cmd": "good"})
+            logger.debug(resp.read())
+        except ConnectionRefusedError as e:
+            logger.warning(e)
 

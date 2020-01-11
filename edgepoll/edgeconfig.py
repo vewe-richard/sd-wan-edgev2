@@ -30,6 +30,7 @@ class EdgeConfig:
             self._config["smsport"]
             self._config["publicip"]
             self._config["inputport"]
+            self._config["timeout"]
         except Exception as e:
             raise Exception("Wrong edge config file: " + configfile)
 
@@ -52,11 +53,14 @@ class EdgeConfig:
             raise Exception("Can not get git commit number")
         self._edgeversion["commit"] = commit
 
-    def setlogger(self, logger):
-        self._logger = logger
-
-    def logger(self):
-        return self._logger
-
     def inputport(self):
         return self._config["inputport"]
+
+    def timeout(self):
+        return self._config["timeout"]
+
+    def sms(self):
+        return self._config["sms"]
+
+    def smsport(self):
+        return self._config["smsport"]

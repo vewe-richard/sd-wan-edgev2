@@ -18,8 +18,7 @@ from getopt import getopt
 import logging
 from edgepoll.edgeconfig import EdgeConfig
 import subprocess
-from multiprocessing import Queue
-from edgepoll import input, execute
+from edgepoll import poll
 
 def usage():
     print("")
@@ -83,31 +82,10 @@ if __name__ == "__main__":
     #logfile
     print("Setup logger ...")
     logger = logsetup(logfile, loglevel)
-    EdgeConfig.getInstance().setlogger(logger)
 
     #
-    print("Start input and execute child processes ...")
-    inputQueue = Queue()
-    mainQueue = Queue()
-    inputs = input.inputInit(inputQueue, mainQueue)
-    pexecute = execute.executeInit(inputQueue, mainQueue)
-
-    while True:
-        msg = mainQueue.get()
-        if "kill" in msg:
-            print("Got kill message ...")
-            break
-
-    print("Terminate all child processes")
-    for ipt in inputs:
-        ipt.terminate()
-    pexecute.terminate()
-
-    print("Join all child processes ...")
-    for ipt in inputs:
-        ipt.join()
-    pexecute.join()
-
+    print("Main Block ...")
+    poll.poll(logger)
     print("Exit edgepoll")
 
 

@@ -4,10 +4,11 @@
   "name": "sz-fatedge",
   "spec": "baicells-sd-wan-fatedge.hw.v01",
   "sw": "fatedge.v01",
-  "sms": "10.27.1.1",
+  "sms": "127.0.0.1",
   "smsport": 8080,
   "publicip": "",
-  "inputport": 10012
+  "inputport": 11012,
+  "timeout": 6
 }
 
 
