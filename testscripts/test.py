@@ -35,6 +35,7 @@ if __name__ == "__main__":
     pservertask.start()
 
     time.sleep(1)
+    print("testtmp.py: send pollnotify")
     opts = {"cmd": "pollnotify"}
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
 

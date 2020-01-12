@@ -6,6 +6,7 @@ from edgepoll.edgeconfig import EdgeConfig
 import traceback
 from edgeutils import utils
 from edgepoll.execute import Execute
+import subprocess
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     _lock = None
@@ -36,6 +37,9 @@ def poll(logger):
     notifytask = Process(target=notifypoll, args=(logger, lock))
     notifytask.start()
 
+    if utils.istest(EdgeConfig.getInstance()):
+        subprocess.Popen(["python3", "./testscripts/testtmp.py"])
+
     try:
         _poll(logger, lock)
     except Exception as e:
@@ -64,7 +68,7 @@ def _poll(logger, lock):
         except Exception as e:
             logger.warning(e)
 
-        if "127.0.0.1" in EdgeConfig.getInstance().sms():
+        if utils.istest(EdgeConfig.getInstance()):
             logger.warning("Exit loop for debug purpose, it's developing environment")
             break
 

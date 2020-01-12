@@ -16,11 +16,17 @@ def http_post(ip, port, url, opts):
 
 
 def oneactionxml(sn, args):
-    xml = '</xml>'
-    xml += '<sn>' + sn + '</sn>'
+    xml = '<xml>'
+    xml += '<head version="1.0" sn="' + sn + '"/>'
     xml += '<subprocess>'
     xml += '<args>' + args + '</args>'
     xml += '</subprocess>'
     xml += '</xml>'
     return xml
 
+def istest(ec):
+    if "127.0.0.1" in ec.sms():
+        print("In test environment")
+        return True
+    else:
+        return False
