@@ -64,3 +64,6 @@ class EdgeConfig:
 
     def smsport(self):
         return self._config["smsport"]
+
+    def sn(self):
+        return self._config["sn"]

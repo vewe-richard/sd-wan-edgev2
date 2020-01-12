@@ -66,7 +66,7 @@ def _poll(logger, lock):
         except ConnectionRefusedError as e:
             logger.warning(e)
         except Exception as e:
-            logger.warning(e)
+            logger.error(traceback.format_exc())
 
         if utils.istest(EdgeConfig.getInstance()):
             logger.warning("Exit loop for debug purpose, it's developing environment")

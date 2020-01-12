@@ -12,7 +12,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length)
         self.send_response(200)
         self.end_headers()
-        xml = utils.oneactionxml("00110011", '["python3", "test.py", ]')
+        xml = utils.oneactionxml("00010001", '["python3", "scripts/test.py"]')
         response = BytesIO()
         response.write(str.encode(xml))
         self.wfile.write(response.getvalue())
