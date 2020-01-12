@@ -15,4 +15,12 @@ def http_post(ip, port, url, opts):
     return response
 
 
+def oneactionxml(sn, args):
+    xml = '</xml>'
+    xml += '<sn>' + sn + '</sn>'
+    xml += '<subprocess>'
+    xml += '<args>' + args + '</args>'
+    xml += '</subprocess>'
+    xml += '</xml>'
+    return xml
 

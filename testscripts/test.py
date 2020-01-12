@@ -12,9 +12,11 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         body = self.rfile.read(content_length)
         self.send_response(200)
         self.end_headers()
+        xml = utils.oneactionxml("00110011", '["python3", "test.py", ]')
         response = BytesIO()
-        response.write(b'OK')
+        response.write(str.encode(xml))
         self.wfile.write(response.getvalue())
+        os.kill(os.getpid(), 9)
 
 def servertask(ec):
     httpd = HTTPServer(('', ec.smsport()), SimpleHTTPRequestHandler)
@@ -29,8 +31,9 @@ if __name__ == "__main__":
     ec.loadconfig("./config.json")
 
     #start http server
-    servertask = Process(target=servertask, args=(ec,))
-    servertask.start()
+    pservertask = Process(target=servertask, args=(ec,))
+    pservertask.start()
+
     time.sleep(1)
     opts = {"cmd": "pollnotify"}
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
