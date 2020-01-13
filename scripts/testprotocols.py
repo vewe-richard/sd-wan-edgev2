@@ -5,10 +5,15 @@
 
 import os
 import sys
+from edgeutils import utils
 
 if __name__ == "__main__":
     print(os.environ["SN"], os.environ["ACTIONID"], os.environ["ACTIONTYPE"])
     print("stdout message")
     print("error message", file=sys.stderr)
+    report = utils.reportactionresult(os.environ["SN"], os.environ["ACTIONID"], os.environ["ACTIONTYPE"],
+                                      0, "OK", "None")
+    utils.http_post(os.environ["SMS"], os.environ["SMSPORT"], "/north/actionresult/", report)
+    sys.exit(0)
 #    sys.exit(-1)
     raise Exception("Bad messsge")

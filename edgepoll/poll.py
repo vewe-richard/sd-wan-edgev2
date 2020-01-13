@@ -39,7 +39,7 @@ def poll(logger):
 
     if utils.istest(EdgeConfig.getInstance()):
         logger.info("In test environment, start simple controller from testscripts")
-        subprocess.Popen(["python3", "./testscripts/testprotocols.py"])
+        subprocess.Popen(["python3", "./testscripts/test.py"])
 
     try:
         _poll(logger, lock)

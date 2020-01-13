@@ -29,3 +29,13 @@ def istest(ec):
         return True
     else:
         return False
+
+def reportactionresult(sn, actionid, actiontype, returncode, astdout, astderr):
+    mydict = dict()
+    mydict["sn"] = sn
+    mydict["actionid"] = actionid
+    mydict["actiontype"] = actiontype
+    mydict["returncode"] = returncode
+    mydict["stdout"] = astdout
+    mydict["stderr"] = astderr
+    return mydict

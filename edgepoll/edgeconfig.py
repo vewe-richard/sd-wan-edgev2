@@ -17,6 +17,7 @@ class EdgeConfig:
             EdgeConfig.__instance = self
 
     def loadconfig(self, configfile):
+        self._configfile = configfile
         with open(configfile) as json_file:
             self._config = json.load(json_file)
 
@@ -67,3 +68,12 @@ class EdgeConfig:
 
     def sn(self):
         return self._config["sn"]
+
+    def config(self):
+        return self._config
+
+    def edgeversion(self):
+        return self._edgeversion
+
+    def configfile(self):
+        return self._configfile

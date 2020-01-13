@@ -2,8 +2,9 @@ from edgepoll import edgeconfig
 import traceback
 import xml.etree.ElementTree as ET
 import json
-from edgepoll.edgeconfig import EdgeConfig
+import os
 import subprocess
+from edgepoll.edgeconfig import EdgeConfig
 from edgeutils import utils
 
 class Execute():
@@ -46,7 +47,7 @@ class Execute():
             except Exception as e:
                 self._logger.error(traceback.format_exc())
                 astderr = type(e).__name__ + ": " + str(e).strip("'")
-                report = self.reportactionresult(sn, actionid, atype, -1, "", astderr)
+                report = utils.reportactionresult(sn, actionid, atype, -1, "", astderr)
                 utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/", report)
 
 
@@ -63,6 +64,10 @@ class Execute():
         env["SN"] = EdgeConfig.getInstance().sn()
         env["ACTIONID"] = aid
         env["ACTIONTYPE"] = atype
+        env["SMS"] = EdgeConfig.getInstance().sms()
+        env["SMSPORT"] = str(EdgeConfig.getInstance().smsport())
+        env["PYTHONPATH"] = os.environ["PYTHONPATH"]
+        env["CONFIGFILE"] = EdgeConfig.getInstance().configfile()
 #        try:
 #            env.append(params["env"])
 #        except:
@@ -75,20 +80,12 @@ class Execute():
         self._logger.info("action stderr: \n%s", astderr)
         if sp.returncode != 0:
 
-            report = self.reportactionresult(env["SN"], aid, atype, sp.returncode, astdout[-100:-1], astderr[-200:-1])
+            report = utils.reportactionresult(env["SN"], aid, atype, sp.returncode, astdout[-100:-1], astderr[-200:-1])
             utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/",
                             report)
 
 
-    def reportactionresult(self, sn, actionid, actiontype, returncode, astdout, astderr):
-        mydict = dict()
-        mydict["sn"] = sn
-        mydict["actionid"] = actionid
-        mydict["actiontype"] = actiontype
-        mydict["returncode"] = returncode
-        mydict["stdout"] = astdout
-        mydict["stderr"] = astderr
-        return mydict
+
 
 
 
