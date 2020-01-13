@@ -4,6 +4,7 @@ import xml.etree.ElementTree as ET
 import json
 from edgepoll.edgeconfig import EdgeConfig
 import subprocess
+from edgeutils import utils
 
 class Execute():
     def __init__(self, logger):
@@ -14,12 +15,14 @@ class Execute():
         root = ET.fromstring(xmlstr)
         version = None
         sn = None
+        actionid = None
         actions = list()
         self._logger.info(__file__ + ":  parsing xml ...")
         for x in root:
             if x.tag == "head":
                 version = x.attrib["version"]
                 sn = x.attrib["sn"]
+                actionid = x.attrib["actionid"]
             elif x.tag == "subprocess":
                 params = dict()
                 for y in x:
@@ -34,31 +37,38 @@ class Execute():
         elif version == "1.0":
             if sn != EdgeConfig.getInstance().sn():
                 raise Exception("serial number mismatched")
+            if actionid == None:
+                raise Exception("no action id exist")
             try:
-                self.doactions(actions)
+                self.doactions(actionid, actions)
             except Exception as e:
                 self._logger.error(traceback.format_exc())
                 # TODO: we may report to controller
+                utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/", {"cmd": "actionresult"})
 
 
-    def doactions(self, actions):
+    def doactions(self, aid, actions):
         self._logger.info("doactions ...")
         for a in actions:
-            self._logger.info("action:", a)
+            self._logger.info("action: %s", a)
             if a["type"] == "subprocess":
-                self.subprocess(a["params"])
+                self.subprocess(aid, a["params"])
         pass
 
-    def subprocess(self, params):
+    def subprocess(self, aid, params):
         env = dict()
         env["SN"] = EdgeConfig.getInstance().sn()
+        env["ACTIONID"] = aid
 #        try:
 #            env.append(params["env"])
 #        except:
 #            pass
 
-        subprocess.run(params["args"], env=env)
+        sp = subprocess.run(params["args"], env=env)
         #TODO, we may report to controller if subprocess returncode is not zero
+        if sp.returncode != 0:
+            utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/",
+                            {"cmd": "actionresult"})
 
 
 

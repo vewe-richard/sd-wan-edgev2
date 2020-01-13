@@ -10,13 +10,22 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
+
+        cmd = None
+        items = body.decode().split("=")
+        if len(items) >= 2:
+            if items[0] == "cmd":
+                cmd = items[1]
+
         self.send_response(200)
         self.end_headers()
-        xml = utils.oneactionxml("00010001", '["python3", "scripts/test.py"]')
+        xml = utils.oneactionxml("00010001", "100", '["python3", "scripts/test.py"]')
         response = BytesIO()
         response.write(str.encode(xml))
         self.wfile.write(response.getvalue())
-        os.kill(os.getpid(), 9)
+        print(cmd)
+#        if cmd == "actionresult":
+#            os.kill(os.getpid(), 9)
 
 def servertask(ec):
     httpd = HTTPServer(('', ec.smsport()), SimpleHTTPRequestHandler)

@@ -69,6 +69,13 @@ def _poll(logger, lock):
             logger.error(traceback.format_exc())
 
         if utils.istest(EdgeConfig.getInstance()):
+            sp = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE)
+            for line in sp.stdout.splitlines():
+                l = line.decode()
+                if "python3" in l and "testscripts" in l:
+                    items = l.split()
+                    subprocess.run(["kill", "-9", items[1]])
+
             logger.warning("Exit loop for debug purpose, it's developing environment")
             break
 
