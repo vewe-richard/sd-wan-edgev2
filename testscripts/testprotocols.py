@@ -6,6 +6,7 @@ from io import BytesIO
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import time
 import traceback
+import urllib
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     def poststr2dict(self, poststr):
@@ -32,8 +33,8 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         try:
             cmd = mydict["CMD"]
             if cmd == "poll":
-#                xml = utils.oneactionxml("00010001", "100", "testprotocols", '["python3", "scripts/testprotocols.py"]')
-                xml = self.actionxmlmissingargs("00010001", "100", "testprotocols", '["python3", "scripts/testprotocols.py"]') #test case, missing args, edge need report
+                xml = utils.oneactionxml("00010001", "100", "testprotocols", '["python3", "scripts/testprotocols.py"]')
+#                xml = self.actionxmlmissingargs("00010001", "100", "testprotocols", '["python3", "scripts/testprotocols.py"]') #test case, missing args, edge need report
                 return str.encode(xml)
             else:
                 return str.encode("UNKNOWN COMMAND: " + cmd)
@@ -42,7 +43,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             return str.encode("NO COMMAND")
 
     def actionresult(self, body):
-        print(__file__, "report action result")
+        print(__file__, "report action result: ", urllib.parse.unquote(body.decode()))
         return str.encode("OK")
 
     def do_POST(self):

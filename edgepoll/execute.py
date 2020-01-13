@@ -42,35 +42,53 @@ class Execute():
             if actionid == None or atype == None:
                 raise Exception("no action id or action type exist")
             try:
-                self.doactions(actionid, actions)
+                self.doactions(actionid, atype, actions)
             except Exception as e:
                 self._logger.error(traceback.format_exc())
-                print(sn, actionid, atype, "-1", "Exception")
-                utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/", {"cmd": "actionresult"})
+                astderr = type(e).__name__ + ": " + str(e).strip("'")
+                report = self.reportactionresult(sn, actionid, atype, -1, "", astderr)
+                utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/", report)
 
 
-    def doactions(self, aid, actions):
+    def doactions(self, aid, atype, actions):
         self._logger.info("doactions ...")
         for a in actions:
             self._logger.info("action: %s", a)
             if a["type"] == "subprocess":
-                self.subprocess(aid, a["params"])
+                self.subprocess(aid, atype, a["params"])
         pass
 
-    def subprocess(self, aid, params):
+    def subprocess(self, aid, atype, params):
         env = dict()
         env["SN"] = EdgeConfig.getInstance().sn()
         env["ACTIONID"] = aid
+        env["ACTIONTYPE"] = atype
 #        try:
 #            env.append(params["env"])
 #        except:
 #            pass
 
-        sp = subprocess.run(params["args"], env=env)
-        #TODO, we may report to controller if subprocess returncode is not zero
+        sp = subprocess.run(params["args"], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        astdout = sp.stdout.decode()
+        astderr = sp.stderr.decode()
+        self._logger.info("action stdout: \n%s", astdout)
+        self._logger.info("action stderr: \n%s", astderr)
         if sp.returncode != 0:
+
+            report = self.reportactionresult(env["SN"], aid, atype, sp.returncode, astdout[-100:-1], astderr[-200:-1])
             utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/",
-                            {"cmd": "actionresult"})
+                            report)
+
+
+    def reportactionresult(self, sn, actionid, actiontype, returncode, astdout, astderr):
+        mydict = dict()
+        mydict["sn"] = sn
+        mydict["actionid"] = actionid
+        mydict["actiontype"] = actiontype
+        mydict["returncode"] = returncode
+        mydict["stdout"] = astdout
+        mydict["stderr"] = astderr
+        return mydict
 
 
 

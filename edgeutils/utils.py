@@ -18,7 +18,6 @@ def http_post(ip, port, url, opts):
 def oneactionxml(sn, actionid, actiontype, args):
     xml = '<xml>'
     xml += '<head version="1.0" sn="' + sn + '" actionid="' + actionid + '" actiontype="' + actiontype + '"/>'
-    xml += '<head version="1.0" sn="' + sn + '" actionid="' + actionid + '"/>'
     xml += '<subprocess>'
     xml += '<args>' + args + '</args>'
     xml += '</subprocess>'
