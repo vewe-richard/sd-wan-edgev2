@@ -86,7 +86,7 @@ if __name__ == "__main__":
     #
     print("Main Block ...")
     poll.poll(logger)
-    print("Exit edgepoll")
+    print("WARNING: Exit edgepoll")
 
 
 

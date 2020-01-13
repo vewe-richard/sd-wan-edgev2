@@ -15,8 +15,9 @@ def http_post(ip, port, url, opts):
     return response
 
 
-def oneactionxml(sn, actionid, args):
+def oneactionxml(sn, actionid, actiontype, args):
     xml = '<xml>'
+    xml += '<head version="1.0" sn="' + sn + '" actionid="' + actionid + '" actiontype="' + actiontype + '"/>'
     xml += '<head version="1.0" sn="' + sn + '" actionid="' + actionid + '"/>'
     xml += '<subprocess>'
     xml += '<args>' + args + '</args>'
@@ -26,7 +27,6 @@ def oneactionxml(sn, actionid, args):
 
 def istest(ec):
     if "127.0.0.1" in ec.sms():
-        print("In test environment")
         return True
     else:
         return False

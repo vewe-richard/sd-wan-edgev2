@@ -17,12 +17,14 @@ class Execute():
         sn = None
         actionid = None
         actions = list()
+        atype = None
         self._logger.info(__file__ + ":  parsing xml ...")
         for x in root:
             if x.tag == "head":
                 version = x.attrib["version"]
                 sn = x.attrib["sn"]
                 actionid = x.attrib["actionid"]
+                atype = x.attrib["actiontype"]
             elif x.tag == "subprocess":
                 params = dict()
                 for y in x:
@@ -37,14 +39,14 @@ class Execute():
         elif version == "1.0":
             if sn != EdgeConfig.getInstance().sn():
                 raise Exception("serial number mismatched")
-            if actionid == None:
-                raise Exception("no action id exist")
+            if actionid == None or atype == None:
+                raise Exception("no action id or action type exist")
             try:
                 self.doactions(actionid, actions)
             except Exception as e:
                 self._logger.error(traceback.format_exc())
-                # TODO: we may report to controller
-                utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/", {"cmd": "actionresult"})
+                print(sn, actionid, atype, "-1", "Exception")
+                utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/", {"cmd": "actionresult"})
 
 
     def doactions(self, aid, actions):
@@ -67,7 +69,7 @@ class Execute():
         sp = subprocess.run(params["args"], env=env)
         #TODO, we may report to controller if subprocess returncode is not zero
         if sp.returncode != 0:
-            utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/",
+            utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/",
                             {"cmd": "actionresult"})
 
 

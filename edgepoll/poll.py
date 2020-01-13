@@ -38,7 +38,8 @@ def poll(logger):
     notifytask.start()
 
     if utils.istest(EdgeConfig.getInstance()):
-        subprocess.Popen(["python3", "./testscripts/testtmp.py"])
+        logger.info("In test environment, start simple controller from testscripts")
+        subprocess.Popen(["python3", "./testscripts/testprotocols.py"])
 
     try:
         _poll(logger, lock)
@@ -59,9 +60,9 @@ def _poll(logger, lock):
         else:
             logger.debug("timeout, polling ...")
         try:
-            resp = utils.http_post(ec.sms(), ec.smsport(), "/", {"cmd": "good"})
+            resp = utils.http_post(ec.sms(), ec.smsport(), "/north/", {"CMD": "poll", "SN": EdgeConfig.getInstance().sn()})
             xmlstr = resp.read().decode()
-            logger.debug(xmlstr)
+            logger.debug("edge polling get response: %s", xmlstr)
             exec.run(xmlstr)
         except ConnectionRefusedError as e:
             logger.warning(e)
@@ -76,7 +77,7 @@ def _poll(logger, lock):
                     items = l.split()
                     subprocess.run(["kill", "-9", items[1]])
 
-            logger.warning("Exit loop for debug purpose, it's developing environment")
+            logger.warning("In test environment, Exit loop for debug purpose, it's developing environment")
             break
 
 
