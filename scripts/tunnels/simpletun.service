@@ -1,0 +1,10 @@
+[Unit]
+Description=SDWAN edge Simpletun service.
+
+[Service]
+Type=simple
+ExecStart={CMDLINE}
+Environment=PYTHONPATH="{GITROOT}"
+
+[Install]
+WantedBy=multi-user.target
