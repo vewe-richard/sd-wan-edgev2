@@ -35,9 +35,7 @@ class Execute():
                         params[y.tag] = y.text
                 actions.append({"type": x.tag, "params": params})
 
-        if version == None:
-            self._logger("Old version compability, todo ...")
-        elif version == "1.0":
+        if version == "1.0":
             if sn != EdgeConfig.getInstance().sn():
                 raise Exception("serial number mismatched")
             if actionid == None or atype == None:
@@ -83,9 +81,6 @@ class Execute():
             report = utils.reportactionresult(env["SN"], aid, atype, sp.returncode, astdout[-100:-1], astderr[-200:-1])
             utils.http_post(EdgeConfig.getInstance().sms(), EdgeConfig.getInstance().smsport(), "/north/actionresult/",
                             report)
-
-
-
 
 
 

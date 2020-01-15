@@ -54,11 +54,6 @@ def _poll(logger, lock):
     ec = EdgeConfig.getInstance()
     exec = Execute(logger)
     while True:
-        released = lock.acquire(block=True, timeout=timeout)
-        if released:
-            logger.debug("got edge pollnotify")
-        else:
-            logger.debug("timeout, polling ...")
         try:
             resp = utils.http_post(ec.sms(), ec.smsport(), "/north/", {"CMD": "poll", "SN": EdgeConfig.getInstance().sn()})
             xmlstr = resp.read().decode()
@@ -68,6 +63,8 @@ def _poll(logger, lock):
             logger.warning(e)
         except Exception as e:
             logger.error(traceback.format_exc())
+
+        break
 
         if utils.istest(EdgeConfig.getInstance()):
             sp = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE)
@@ -80,6 +77,11 @@ def _poll(logger, lock):
             logger.warning("In test environment, Exit loop for debug purpose, it's developing environment")
             break
 
+        released = lock.acquire(block=True, timeout=timeout)
+        if released:
+            logger.debug("got edge pollnotify")
+        else:
+            logger.debug("timeout, polling ...")
 
 
 

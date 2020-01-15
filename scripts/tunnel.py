@@ -25,9 +25,6 @@ def usage():
 def server(port):
     # check parameters
     # if port is available, if port is used, it will raise exception socket.error
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(("127.0.0.1", port))
-
     cmdline = "/usr/bin/python3 " + os.getcwd() + "/scripts/tunnels/simpletunnel.py -s -p " + str(port)
 
     # install service
@@ -36,10 +33,12 @@ def server(port):
         serviceFile = tmp.replace("{CMDLINE}", cmdline)
     svcname = "simpletun.s." + str(port) + ".service"
     print("install service: ", svcname)
-    with open("/lib/systemd/system/"+svcname, "w") as f:
-        f.write(serviceFile)
     subprocess.run(["systemctl", "disable", svcname])
     subprocess.run(["systemctl", "stop", svcname])
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind(("127.0.0.1", port))
+    with open("/lib/systemd/system/"+svcname, "w") as f:
+        f.write(serviceFile)
     subprocess.run(["systemctl", "daemon-reload"])
     subprocess.run(["systemctl", "start", svcname])
     subprocess.run(["systemctl", "enable", svcname])
