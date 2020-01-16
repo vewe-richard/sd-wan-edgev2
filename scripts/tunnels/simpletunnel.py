@@ -73,7 +73,7 @@ class SimpleTunnel():
             if len(items) < 2:
                 continue
             nic = items[1].strip()
-            if len(nic) < 5:
+            if not len(nic) == 5:
                 continue
             if "tap" not in nic[0:3]:
                 continue

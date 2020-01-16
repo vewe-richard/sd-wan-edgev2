@@ -15,10 +15,9 @@ from edgepoll.edgeconfig import EdgeConfig
 
 def getwans():
     sp = subprocess.run(["ip", "route", "show", "default"], stdout=subprocess.PIPE)
-    wans = ""
+    wans = dict()
     for line in sp.stdout.splitlines():
         l = line.decode().split()
-#        wans += (l[4] + "," + l[2] + ";")
         sp2 = subprocess.run(["ip", "address", "show", l[4]], stdout=subprocess.PIPE)
         ip = None
         for ll in sp2.stdout.splitlines():
@@ -27,16 +26,16 @@ def getwans():
                 ip = nl.split()[1].split("/")[0]
                 break
         if ip != None:
-            wans += (l[4] + "," + ip + ";")
-
+            wans[l[4]] =ip
     return wans
-
 
 if __name__ == "__main__":
     EdgeConfig.getInstance().loadconfig(os.environ["CONFIGFILE"])
 #    EdgeConfig.getInstance().loadedgeversion()
 
     config = EdgeConfig.getInstance().config()
+    config["CMD"] = "query"
+    config["wans"] = getwans()
     try:
         os.environ["SN"]
     except:
@@ -44,9 +43,6 @@ if __name__ == "__main__":
         print(config)
         print("test environment", file=sys.stderr)
         sys.exit(-1)
-
-    config["CMD"] = "query"
-    config["wans"] = getwans()
     report = utils.reportactionresult(os.environ["SN"], os.environ["ACTIONID"], os.environ["ACTIONTYPE"],
                                           0, str(config), "")
     utils.http_post(os.environ["SMS"], os.environ["SMSPORT"], "/north/actionresult/", report)
