@@ -74,7 +74,7 @@ Note, please all letters should be lowercase.
   "publicip": "",       # For fatedge device, if it has a public ip, present it here, it can fasten configuring
   "inputport": 11012,   # Keep it
   "timeout": 6,          # Edge poll actions from controller, it's the interval
-  ""map": {"enp7s0f1": "200.100.100.200"}"  # mapping of public ip to nic interface, for fatedge device
+  "map": {"enp7s0f1": "200.100.100.200"}  # mapping of public ip to nic interface, for fatedge device
 }
 ```
 
@@ -87,7 +87,11 @@ The link is `http://xx.xx.xx.xx:8080/orchestration`, after create the tunnel, re
 `http://xx.xx.xx.xx:8080/actions` to check action results.
 
 
+### Appendix
+1. Manual add route path to subnet of fatedge under thinedge
 
+For example in thinedge,
+sudo ip route add 192.168.56.0/24 via 10.139.37.1
 
 
 
