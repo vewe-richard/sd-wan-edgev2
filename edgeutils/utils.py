@@ -25,7 +25,7 @@ def oneactionxml(sn, actionid, actiontype, args):
     return xml
 
 def istest(ec):
-    if "127.0.0.1" in ec.sms():
+    if "127.0.0.1" in ec.sms() and "88888888" in ec.sn():
         return True
     else:
         return False
