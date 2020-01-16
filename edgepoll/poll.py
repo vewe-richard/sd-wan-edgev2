@@ -53,6 +53,7 @@ def _poll(logger, lock):
     timeout = EdgeConfig.getInstance().timeout()
     ec = EdgeConfig.getInstance()
     exec = Execute(logger)
+    count = 0
     while True:
         try:
             resp = utils.http_post(ec.sms(), ec.smsport(), "/north/", {"CMD": "poll", "SN": EdgeConfig.getInstance().sn()})
@@ -64,7 +65,9 @@ def _poll(logger, lock):
         except Exception as e:
             logger.error(traceback.format_exc())
 
-        break
+#        if count > 1:
+#            break
+#        count += 1
 
         if utils.istest(EdgeConfig.getInstance()):
             sp = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE)
