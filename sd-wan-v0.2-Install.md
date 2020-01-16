@@ -38,6 +38,7 @@ Through `sudo su` to enter root shell, and run `pip3 install flask` under this s
 ### C. Edge  
 ###### First time Install
 ```
+sudo apt-get install bridge-utils
 git clone https://github.com/vewe-richard/sd-wan-edgev2.git
 cd sd-wan-edgev2
 sudo python3 install.py
@@ -88,10 +89,14 @@ The link is `http://xx.xx.xx.xx:8080/orchestration`, after create the tunnel, re
 
 
 ### Appendix
-1. Manual add route path to subnet of fatedge under thinedge
-
-For example in thinedge,
-sudo ip route add 192.168.56.0/24 via 10.139.37.1
+1. Pass through from subnet of thinedge to subnet of fatedge   
+*  Manual add route path to subnet of fatedge under thinedge
+   For example in thinedge,  
+   `sudo ip route add 192.168.56.0/24 via 10.139.37.1`
+*  Fatedge should enable ip forwarding   
+   `sudo sysctl -w net.ipv4.ip_forward=1`  
+*  Add route path to subnet of thinedge under net of fatedge
+    `sudo ip route add 10.139.37.0/24 via 192.168.56.3`
 
 
 
