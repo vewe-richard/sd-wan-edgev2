@@ -74,17 +74,17 @@ if __name__ == "__main__":
 
     #check parameters
     #! configfile
-    print("Load config and edgeversion ...")
+    print("Load config and edgeversion ... configfile:", configfile)
     EdgeConfig.getInstance().loadconfig(configfile)
     EdgeConfig.getInstance().loadedgeversion()
     # Any more pre-run environment checking can be add here
 
     #logfile
-    print("Setup logger ...")
+    print("Setup logger ...logfile", logfile, "loglevel:", loglevel)
     logger = logsetup(logfile, loglevel)
 
     #
-    print("Main Block ...")
+    print("Main Block ... istest: ", utils.istest(EdgeConfig.getInstance()))
     poll.poll(logger)
     print("WARNING: Exit edgepoll")
 
