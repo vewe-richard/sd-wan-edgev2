@@ -31,11 +31,13 @@ def getwans():
 
 if __name__ == "__main__":
     EdgeConfig.getInstance().loadconfig(os.environ["CONFIGFILE"])
-#    EdgeConfig.getInstance().loadedgeversion()
+    EdgeConfig.getInstance().loadedgeversion()
 
     config = EdgeConfig.getInstance().config()
     config["CMD"] = "query"
     config["wans"] = getwans()
+    version = EdgeConfig.getInstance().edgeversion()
+    config["version"] = version["major"] + "." + version["minor"] + "." + version["commit"]
     try:
         os.environ["SN"]
     except:
