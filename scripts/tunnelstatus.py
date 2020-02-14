@@ -61,6 +61,10 @@ if __name__ == "__main__":
         doreport(-1, out, "Can not find tap in systemctl status output")
         sys.exit(-1)
 
+    if not isclient:
+        doreport(0, out, "")
+        sys.exit(0)
+
     sp = subprocess.run(["ping", "-I", tap, "-c", "3", "-W", "3", "10.139.37.1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     tout = sp.stdout.decode()
     terr = sp.stderr.decode()
