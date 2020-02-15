@@ -35,13 +35,13 @@ def logsetup(logfile, loglevel):
     logger = logging.getLogger("edgepoll")
 
     if logfile == None:
-        logging.basicConfig(level=loglevel, format="%(levelname)s:\t%(message)s")
+        logging.basicConfig(level=loglevel, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     else:
         subprocess.run(["mkdir", "-p", os.path.dirname(logfile)])
         handler = logging.FileHandler(logfile)
         logging.basicConfig(level=loglevel)
         handler.setLevel(loglevel)
-        formater = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        formater = logging.Formatter("%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
         handler.setFormatter(formater)
         logger.addHandler(handler)
     return logger
