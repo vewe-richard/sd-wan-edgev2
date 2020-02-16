@@ -12,16 +12,22 @@ def doreport(ret, out, err):
         report = utils.reportactionresult(os.environ["SN"], os.environ["ACTIONID"], os.environ["ACTIONTYPE"],
                                       ret, out, err)
         utils.http_post(os.environ["SMS"], os.environ["SMSPORT"], "/north/actionresult/", report)
-    except:
+    except Exception as e:
         print("returncode: ", ret)
         print("stdout: ", out)
         print("stderr: ", err)
 
 
 if __name__ == "__main__":
-    sp = subprocess.run(["echo", "helloworld"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    out = sp.stdout.decode()
+    '''
+    sp = subprocess.run(["tail", "-c", "2048", "/var/log/sdwan/edge/edge.log"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    out = "edge.log\n\n" + sp.stdout.decode()
     err = sp.stderr.decode()
     ret = sp.returncode
+    '''
 
-    doreport(ret, out, err)
+    sp = subprocess.run(["journalctl", "-p", "6", "-u", "edgepoll", "-o", "cat", "-n", "50"], stdout=subprocess.PIPE)
+    out = "syslog\n\n" + sp.stdout.decode()
+
+
+    doreport(0, out, "")
