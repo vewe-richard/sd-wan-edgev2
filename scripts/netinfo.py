@@ -31,7 +31,10 @@ if __name__ == "__main__":
     sp = subprocess.run(["ip", "address", "show"], stdout=subprocess.PIPE)
     out += "\nip address show\n" + sp.stdout.decode()
 
-    sp = subprocess.run(["brctl", "show"], stdout=subprocess.PIPE)
-    out += "\nbrctl show\n" + sp.stdout.decode()
+    try:
+        sp = subprocess.run(["brctl", "show"], stdout=subprocess.PIPE)
+        out += "\nbrctl show\n" + sp.stdout.decode()
+    except:
+        out += "\nbrctl is not exist\n"
 
     doreport(0, out, "")
