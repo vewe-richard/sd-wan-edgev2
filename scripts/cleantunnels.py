@@ -25,10 +25,18 @@ if __name__ == "__main__":
         dl = l.decode()
         if "simpletun" in dl:
             items = dl.split()
-            subprocess.run(["systemctl", "disable", items[0]])
-            subprocess.run(["systemctl", "stop", items[0]])
             try:
-                os.unlink("/lib/systemd/system/" + items[0])
+                if "simpletun" in items[0]:
+                    svc = items[0]
+                elif "simpletun" in items[1]:
+                    svc = items[1]
+            except:
+                continue
+
+            subprocess.run(["systemctl", "disable", svc])
+            subprocess.run(["systemctl", "stop", svc])
+            try:
+                os.unlink("/lib/systemd/system/" + svc)
             except:
                 pass
 
