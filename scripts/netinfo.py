@@ -19,11 +19,12 @@ def doreport(ret, out, err):
 
 
 if __name__ == "__main__":
-    sp = subprocess.run(["systemctl", "status", "edgepoll"], stdout=subprocess.PIPE)
-    out = "\nedgepoll service\n" + sp.stdout.decode()
-
-    sp = subprocess.run(["ps", "-C", "simpletun", "-f"], stdout=subprocess.PIPE)
-    out += "\nps -C simpletun -f\n" + sp.stdout.decode()
+    sp = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE)
+    out = "list edgepoll and simpletun processes\n"
+    for l in sp.stdout.splitlines():
+        dl = l.decode()
+        if "simpletun" in dl or "edgepoll" in dl:
+            out += dl + "\n"
 
     sp = subprocess.run(["ip", "route", "list"], stdout=subprocess.PIPE)
     out += "\nip route list\n" + sp.stdout.decode()
