@@ -10,17 +10,30 @@
 # 3. On Pycharm
 #   add Environment PYTHONPATH
 #   -s -p 5555
-# test in shell
+# 4. test in shell
+#
 # sudo su
-# export PYTHONPATH="$PWD" &&  python3 scripts/tunnels/simpletunnel.py -s -p 5555
-# export PYTHONPATH="$PWD" &&  python3 scripts/tunnels/simpletunnel.py -s -p 5556
-# export PYTHONPATH="$PWD" &&  python3 scripts/tunnels/simpletunnel.py -c 127.0.0.1 -p 5555 -l 10.139.37.2
-# export PYTHONPATH="$PWD" &&  python3 scripts/tunnels/simpletunnel.py -c 127.0.0.1 -p 5556 -l 10.139.37.3
+# python3 sd-wan-env/ns4tunnels.py
+#
+# export PYTHONPATH="$PWD" && ip netns exec main python3 scripts/tunnels/simpletunnel.py -s -p 5555 -l 10.139.27.1
+# export PYTHONPATH="$PWD" && ip netns exec n101 python3 scripts/tunnels/simpletunnel.py -c 10.129.101.100 -p 5555 -l 10.139.27.3
+# ip netns exec n101 ping 10.139.27.1
+#
+# export PYTHONPATH="$PWD" && ip netns exec main python3 scripts/tunnels/simpletunnel.py -s -p 55556 -l 10.139.47.1
+# export PYTHONPATH="$PWD" && ip netns exec n101 python3 scripts/tunnels/simpletunnel.py -c 10.129.101.100 -p 55556 -l 10.139.47.3
+# ip netns exec n101 ping 10.139.47.1
+#
+# export PYTHONPATH="$PWD" && ip netns exec main python3 scripts/tunnels/simpletunnel.py -s -p 33333 -l 10.139.27.1
+# export PYTHONPATH="$PWD" && ip netns exec n102 python3 scripts/tunnels/simpletunnel.py -c 10.129.102.100 -p 33333 -l 10.139.27.8
+# ip netns exec n102 ping 10.139.27.3
+
 # By vewe-richard@github, 2020/01/10
 #
 #
 
 import os
+from random import randint
+
 from edgeutils import utils
 import sys
 from getopt import getopt
@@ -29,65 +42,62 @@ import time
 
 class SimpleTunnel():
     def __init__(self):
-        self._serverbr = "br-stunnel"
         self._tapname = None
-        self._brip = "10.139.37.1/24"
         pass
 
     def tapname(self):
         return self._tapname
 
     def selecttap(self):
-        for i in range(20, 1000):
-            tap = "tap" + str(i)
+        while True:
+            i = randint(100, 999)
+            tap = "sdtap" + str(i)
             sp = subprocess.run(["ip", "link", "show", tap])
             if sp.returncode == 0:
                 continue
             self._tapname = tap
-            return
+            break
 
     def usage(self):
-        print("python3 scripts/tunnels/simpletunnel.py [-s|-d|-c serverip] [-p port] [-l locaip] [-h|--help]")
+        print("python3 scripts/tunnels/simpletunnel.py [-s|-d|-c serverip] [-v] [-p port] [-l locaip] [-h|--help]")
         pass
 
     def clear(self):
         sp = subprocess.run(["ps", "-C", "simpletun", "-f"], stdout=subprocess.PIPE)
         running = sp.stdout.decode()
-        sp = subprocess.run(["brctl", "show", "br-stunnel"], stdout=subprocess.PIPE)
-        for l in sp.stdout.splitlines():
-            items = l.decode().split()
-            if len(items) < 1:
-                continue
-            last = items[-1]
-            if len(last) < 4:
-                continue
-            if "tap" not in last[0:3]:
-                continue
-            if last in running:
-                continue
-            subprocess.run(["brctl", "delif", self._serverbr, items[-1]])
-            subprocess.run(["ip", "tuntap", "del", "mode", "tap", last])
         sp = subprocess.run(["ip", "link", "show"], stdout=subprocess.PIPE)
         for l in sp.stdout.splitlines():
             items = l.decode().split(":")
             if len(items) < 2:
                 continue
             nic = items[1].strip()
-            if not len(nic) == 5:
+            if not len(nic) == 8:
                 continue
-            if "tap" not in nic[0:3]:
+            if "sdtap" not in nic:
+                continue
+            if nic in running:
                 continue
             subprocess.run(["ip", "tuntap", "del", "mode", "tap", nic])
+        sp = subprocess.run(["brctl", "show"], stdout=subprocess.PIPE)
+        for l in sp.stdout.decode().splitlines():
+            if not "sdtunnel-" in l:
+                continue
+            items = l.split()
+            if len(items) < 4:
+                subprocess.run(["ip", "link", "set", items[0], "down"])
+                subprocess.run(["brctl", "delbr", items[0]])
         pass
 
-    def server(self, port):
+    def server(self, port, localip, verbose):
         self.clear()
-        sp = subprocess.run(["ip", "address", "show", self._serverbr])
+        items = localip.split(".")
+        serverbr = "sdtunnel-" + items[2]
+        sp = subprocess.run(["ip", "address", "show", serverbr])
         if sp.returncode != 0:
-            print("Create bridge", self._serverbr)
-            subprocess.run(["brctl", "addbr", self._serverbr])
-            subprocess.run(["ip", "link", "set", self._serverbr, "up"])
-            subprocess.run(["ip", "addr", "add", self._brip, "dev", self._serverbr])
+            print("Create bridge", serverbr)
+            subprocess.run(["brctl", "addbr", serverbr])
+            subprocess.run(["ip", "link", "set", serverbr, "up"])
+            subprocess.run(["ip", "addr", "add", localip + "/24", "dev", serverbr])
             pass
 
         #select a tap device
@@ -96,29 +106,25 @@ class SimpleTunnel():
         print("Select tapname:", self.tapname())
         subprocess.run(["ip", "tuntap", "add", "mode", "tap", self.tapname()])
         subprocess.run(["ip", "link", "set", self.tapname(), "up"])
-        sp = subprocess.run(["brctl", "addif", self._serverbr, self.tapname()])
+        sp = subprocess.run(["brctl", "addif", serverbr, self.tapname()])
         if sp.returncode != 0:
             subprocess.run(["ip", "tuntap", "del", "mode", "tap", self.tapname()])
-            print("Can not add", self.tapname(), "to", self._serverbr)
+            print("Can not add", self.tapname(), "to", serverbr)
             sys.exit(-1)
 
+        if verbose:
+            args = ["./scripts/tunnels/simpletun", "-a", "-i", self.tapname(), "-s", "-p", str(port), "-d"]
+        else:
+            args = ["./scripts/tunnels/simpletun", "-a", "-i", self.tapname(), "-s", "-p", str(port)]
+
         while True:
-            subprocess.run(["./scripts/tunnels/simpletun", "-a", "-i", self.tapname(), "-s", "-p", str(port), "-d"])
+            subprocess.run(args)
             print("restart simpletun as it quit.")
             time.sleep(10)
         pass
 
-    def client(self, ip, port, localip):
+    def client(self, ip, port, localip, verbose):
         self.clear()
-        # if correct localip
-        if localip == self._brip:
-            print("Wrong localip, same as bridge ip")
-            sys.exit(-1)
-        litems = localip.split(".")
-        bitems = self._brip.split(".")
-        if litems[0] != bitems[0] or litems[1] != bitems[1] or litems[2] != bitems[2]:
-            print("Wrong localip", localip)
-            sys.exit(-1)
 
         self.selecttap()
         print("")
@@ -126,16 +132,22 @@ class SimpleTunnel():
         subprocess.run(["ip", "tuntap", "add", "mode", "tap", self.tapname()])
         subprocess.run(["ip", "addr", "add", localip + "/24", "dev", self.tapname()])
         subprocess.run(["ip", "link", "set", self.tapname(), "up"])
+
+        if verbose:
+            args = ["./scripts/tunnels/simpletun", "-a", "-i", self.tapname(), "-c", ip, "-p", str(port), "-d"]
+        else:
+            args = ["./scripts/tunnels/simpletun", "-a", "-i", self.tapname(), "-c", ip, "-p", str(port)]
         while True:
-            subprocess.run(["./scripts/tunnels/simpletun", "-a", "-i", self.tapname(), "-c", ip, "-p", str(port), "-d"])
+            subprocess.run(args)
             print("restart simpletun as it quit.")
             time.sleep(10)
         pass
 
     def run(self, argv):
-        opts, args = getopt(argv, "hsdc:p:l:", ["help"])
+        opts, args = getopt(argv, "hsdvc:p:l:", ["help"])
         port = None
         localip = None
+        verbose = False
         for o, v in opts:
             if o in "-h" or o in "--help":
                 self.usage()
@@ -146,6 +158,11 @@ class SimpleTunnel():
             elif o in "-l":
                 localip = v
                 pass
+            elif o in "-v":
+                verbose = True
+            elif o in "-d":
+                self.clear()
+                return
 
         if port == None:
             self.usage()
@@ -154,23 +171,24 @@ class SimpleTunnel():
         for o, v in opts:
             if o in "-s":
                 print("simpletunnel server, port: ", port)
-                self.server(port)
+                self.server(port, localip, verbose)
                 pass
             elif o in '-c':
                 ip = v
                 if localip == None:
                     self.usage()
                     sys.exit(-1)
-                self.client(ip, port, localip)
-                pass
-            elif o in "-d":
+                self.client(ip, port, localip, verbose)
                 pass
 
 
 if __name__ == "__main__":
     # to be sure current working directory is root of git project
     print("Checking working directory ...")
-    cwd = os.environ["PYTHONPATH"]
+    try:
+        cwd = os.environ["RUNONPYCHARM"]
+    except:
+        cwd = os.environ["PYTHONPATH"]
     assert utils.runningUnderGitProjectRootDirectory(cwd)
     os.chdir(cwd)
 
