@@ -56,6 +56,8 @@ def delete(port):
             os.unlink("/lib/systemd/system/" + svc)
         except:
             pass
+    from scripts.tunnels.simpletunnel import SimpleTunnel
+    SimpleTunnel().clear()
     pass
 
 
