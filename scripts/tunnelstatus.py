@@ -44,6 +44,7 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     tap = None
+    ip = None
     for l in tout.splitlines():
         if "Loaded:" in l:
             out += l + "\n"
@@ -56,6 +57,11 @@ if __name__ == "__main__":
                 if "tap" in items[1]:
                     its = items[1].split()
                     tap = its[0]
+            if "-l" in l:
+                items = l.split("-l")
+                items = items[1].split()
+                its = items[0].split(".")
+                ip = its[0] + "." + its[1] + "." + its[2] + ".1"
 
     if tap is None:
         doreport(-1, out, "Can not find tap in systemctl status output")
@@ -65,7 +71,11 @@ if __name__ == "__main__":
         doreport(0, out, "")
         sys.exit(0)
 
-    sp = subprocess.run(["ping", "-I", tap, "-c", "3", "-W", "3", "10.139.37.1"], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    if ip is None:
+        doreport(-1, out, "Can not find ip in systemctl status output")
+        sys.exit(-1)
+
+    sp = subprocess.run(["ping", "-I", tap, "-c", "3", "-W", "3", ip], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     tout = sp.stdout.decode()
     terr = sp.stderr.decode()
     tret = sp.returncode

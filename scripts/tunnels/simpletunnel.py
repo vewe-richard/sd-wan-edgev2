@@ -78,7 +78,7 @@ class SimpleTunnel():
             if nic in running:
                 continue
             subprocess.run(["ip", "tuntap", "del", "mode", "tap", nic])
-        sp = subprocess.run(["brctl", "show"], stdout=subprocess.PIPE)
+        sp = subprocess.run(["/sbin/brctl", "show"], stdout=subprocess.PIPE)
         for l in sp.stdout.decode().splitlines():
             if not "sdtunnel-" in l:
                 continue
