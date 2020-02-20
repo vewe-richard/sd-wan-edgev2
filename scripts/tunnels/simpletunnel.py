@@ -85,7 +85,7 @@ class SimpleTunnel():
             items = l.split()
             if len(items) < 4:
                 subprocess.run(["ip", "link", "set", items[0], "down"])
-                subprocess.run(["brctl", "delbr", items[0]])
+                subprocess.run(["/sbin/brctl", "delbr", items[0]])
         pass
 
     def server(self, port, localip, verbose):
