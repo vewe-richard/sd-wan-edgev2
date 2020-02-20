@@ -101,6 +101,17 @@ if __name__ == "__main__":
             remove = True
             pass
 
+    if not ns:
+        pid = os.getpid()
+        sp = subprocess.run(["ip", "netns", "identify", str(pid)], stdout=subprocess.PIPE)
+        ns = sp.stdout.decode().strip()
+        if len(ns) < 2:
+            ns = ""
+        else:
+            ns = "/sbin/ip netns exec " + ns + " "
+
+    print("namespace:", ns)
+
     int(port)
     if remove:
         delete(port)
