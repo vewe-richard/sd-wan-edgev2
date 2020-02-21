@@ -40,5 +40,37 @@ if __name__ == "__main__":
             except:
                 pass
 
+    sp = subprocess.run(["ip", "route", "list"], stdout=subprocess.PIPE)
+    rlt = sp.stdout.decode()
+    for l in rlt.splitlines():
+        items = l.split()
+        if len(items) < 5:
+            continue
+        if "default" == items[0]:
+            continue
+        if "10.139" in items[2] and "via" == items[1]:
+            subprocess.run(["ip", "route", "delete", items[0], "via", items[2]])
+
+    sp = subprocess.run(["ip", "link", "show"], stdout=subprocess.PIPE)
+    for l in sp.stdout.splitlines():
+        items = l.decode().split(":")
+        if len(items) < 2:
+            continue
+        nic = items[1].strip()
+        if not len(nic) == 8:
+            continue
+        if "sdtap" not in nic:
+            continue
+        subprocess.run(["ip", "tuntap", "del", "mode", "tap", nic])
+    sp = subprocess.run(["/sbin/brctl", "show"], stdout=subprocess.PIPE)
+    for l in sp.stdout.decode().splitlines():
+        if not "sdtunnel-" in l:
+            continue
+        items = l.split()
+        if len(items) < 4:
+            subprocess.run(["ip", "link", "set", items[0], "down"])
+            subprocess.run(["/sbin/brctl", "delbr", items[0]])
+
+
 
     doreport(0, out, "")
