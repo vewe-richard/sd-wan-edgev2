@@ -5,7 +5,7 @@
   "spec": "baicells-sd-wan-fatedge.hw.v02",
   "sw": "fatedge.v01",
   "sms": "127.0.0.1",
-  "smsport": 8080,
+  "smsport": 8081,
   "publicip": "",
   "inputport": 11012,
   "timeout": 6

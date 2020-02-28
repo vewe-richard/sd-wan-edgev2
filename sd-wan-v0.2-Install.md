@@ -14,17 +14,17 @@ Edge is the service installed in Baicells edge gateway.
 ###### First time install
 ```
 sudo apt install python3-pip
-git clone https://github.com/vewe-richard/sd-wan-controller.git
+git clone https://gitee.com/vewe-richard/sd-wan-controllerv2.git
 ```
 
 ###### Run it or Update it
 ```
-cd sd-wan-controller
+cd sd-wan-controllerv2
 git pull
 
 sudo su
 pip3 install flask
-python3 controllerv2/install.py
+python3 install.py
 ```
 Note:  
 Through `sudo su` to enter root shell, and run `pip3 install flask` under this shell.
@@ -33,7 +33,7 @@ Through `sudo su` to enter root shell, and run `pip3 install flask` under this s
 *  Open `http://xx.xx.xx.xx:8080/index.htm` in web browser to be sure Controller is running.
 *  If Controller is not running,   
    `systemctl status controllerv2` to check service status   
-   `tail -n 100 /var/log/syslog` to check service log information
+   `tail -f /var/log/sdwan/controller/controller.log` to check service log information
 
 ### C. Edge  
 ###### First time Install
