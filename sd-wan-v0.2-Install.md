@@ -30,7 +30,7 @@ Note:
 Through `sudo su` to enter root shell, and run `pip3 install flask` under this shell.
 
 ###### Check Controller is running
-*  Open `http://xx.xx.xx.xx:8080/index.htm` in web browser to be sure Controller is running.
+*  Open `http://xx.xx.xx.xx:8081/index.htm` in web browser to be sure Controller is running.
 *  If Controller is not running,   
    `systemctl status controllerv2` to check service status   
    `tail -f /var/log/sdwan/controller/controller.log` to check service log information
@@ -71,7 +71,7 @@ Note, please all letters should be lowercase.
   "spec": "baicells-sd-wan-fatedge.hw.v01",  # hardware spec
   "sw": "fatedge.v01",  # software version
   "sms": "127.0.0.1",   # IP of Controller
-  "smsport": 8080,      # Port of Controller
+  "smsport": 8081,      # Port of Controller
   "publicip": "",       # For fatedge device, if it has a public ip, present it here, it can fasten configuring
   "inputport": 11012,   # Keep it
   "timeout": 6,          # Edge poll actions from controller, it's the interval
@@ -80,12 +80,12 @@ Note, please all letters should be lowercase.
 ```
 
 After change configuration file,  `sudo systemctl restart edgepoll` to restart the edgepoll service,
-and open `http://xx.xx.xx.xx:8080/procedureorchestration` to check if the edge device is registered.
+and open `http://xx.xx.xx.xx:8081/procedureorchestration` to check if the edge device is registered.
 
 
 ### III. Network/Tunnels Orchestration
 The link is `http://xx.xx.xx.xx:8080/orchestration`, after create the tunnel, refresh link 
-`http://xx.xx.xx.xx:8080/actions` to check action results.
+`http://xx.xx.xx.xx:8081/actions` to check action results.
 
 
 ### Appendix
