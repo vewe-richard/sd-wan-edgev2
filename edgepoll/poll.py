@@ -1,4 +1,5 @@
-from multiprocessing import Process, Lock
+from multiprocessing import Process, Queue
+from queue import Empty
 import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from io import BytesIO
@@ -7,56 +8,92 @@ import traceback
 from edgeutils import utils
 from edgepoll.execute import Execute
 import subprocess
+from edgepoll.inithandler import InitHandler
 
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
-    _lock = None
+    _queue = None
+    _logger = None
+    _inithandler = None
+    def poststr2dict(self, poststr):
+        items = poststr.split("&")
+        mydict = dict()
+        for item in items:
+            ii = item.split("=")
+            mydict[ii[0]] = ii[1]
+        return mydict
 
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)
-        if "pollnotify" in body.decode():
-            self.send_response(200)
+
+        try:
+            mydict = self.poststr2dict(body.decode())
+            # this is the message to poll process, such as pollnotify message
+            if mydict["entry"] == "mainself":
+                self._queue.put(mydict)
+                self.send_response(200)
+                self.end_headers()
+                return
+            # this is the message to Main class in init scripts
+            elif mydict["entry"] == "main":
+                self._queue.put(mydict)
+                self.send_response(200)
+                self.end_headers()
+                return
+            # this is the message to this process self
+            elif mydict["entry"] == "httpself":
+                pass
+            # this is the message to Http class in init scripts
+            elif mydict["entry"] == "http":
+                obj = self._inithandler.obj(mydict["module"])
+                obj.post(mydict)
+        except:
+            self._logger.info(traceback.format_exc())
+            self.send_response(400)
+            self.end_headers()
+            return
+
+        self.send_response(400)
         self.end_headers()
-        self._lock.release()
 #        response = BytesIO()
 #        response.write(b'OK')
 #        self.wfile.write(response.getvalue())
 
 
-def notifypoll(logger, lock):
+def notifypoll(logger, myqueue):
     logger.info("Begin httpserver to wait poll notify ...")
-
-    SimpleHTTPRequestHandler._lock = lock
+    ih = InitHandler("http", logger)
+    SimpleHTTPRequestHandler._queue = myqueue
+    SimpleHTTPRequestHandler._logger = logger
+    SimpleHTTPRequestHandler._inithandler = ih
     httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
 
 def poll(logger):
-    lock = Lock()
-    lock.acquire()
-    notifytask = Process(target=notifypoll, args=(logger, lock))
+    ih = InitHandler("main", logger)
+
+    myqueue = Queue()
+    notifytask = Process(target=notifypoll, args=(logger, myqueue))
     notifytask.start()
 
-    if utils.istest(EdgeConfig.getInstance()):
-        logger.info("In test environment, start simple controller from testscripts")
-        subprocess.Popen(["python3", "./testscripts/test.py"])
-
     try:
-        _poll(logger, lock)
+        _poll(logger, myqueue, ih)
     except Exception as e:
         logger.error(traceback.format_exc())
         traceback.print_exc()
     finally:
         notifytask.terminate()
 
-def _poll(logger, lock):
-    timeout = EdgeConfig.getInstance().timeout()
+def _poll(logger, myqueue, initHandler):
+    subprocess.Popen(["python3", "./testscripts/test.py"])
+
     ec = EdgeConfig.getInstance()
+    timeout = ec.timeout()
     exec = Execute(logger)
-    count = 0
     while True:
         try:
-            resp = utils.http_post(ec.sms(), ec.smsport(), "/north/", {"CMD": "poll", "SN": EdgeConfig.getInstance().sn()})
+            resp = utils.http_post(ec.sms(), ec.smsport(), "/north/", {"CMD": "poll", "SN": ec.sn()})
             xmlstr = resp.read().decode()
             logger.debug("edge polling get response: %s", xmlstr)
             exec.run(xmlstr)
@@ -65,26 +102,22 @@ def _poll(logger, lock):
         except Exception as e:
             logger.error(traceback.format_exc())
 
-#        if count > 1:
-#            break
-#        count += 1
-
-        if utils.istest(EdgeConfig.getInstance()):
-            sp = subprocess.run(["ps", "-ef"], stdout=subprocess.PIPE)
-            for line in sp.stdout.splitlines():
-                l = line.decode()
-                if "python3" in l and "testscripts" in l:
-                    items = l.split()
-                    subprocess.run(["kill", "-9", items[1]])
-
-            logger.warning("In test environment, Exit loop for debug purpose, it's developing environment")
+        # todo wait queue timeout
+        try:
+            msg = myqueue.get(timeout=timeout)
+            logger.debug("msg: %s", str(msg))
+            entry = msg["entry"]
+            if entry == "mainself":
+                if msg["cmd"] == "pollnotify":
+                    logger.debug("poll notifying")
+            elif entry == "main":
+                obj = initHandler.obj(msg["module"])
+                obj.post(msg)
+        except Empty:
+            logger.debug("timeout wait for queue")
             break
-
-        released = lock.acquire(block=True, timeout=timeout)
-        if released:
-            logger.debug("got edge pollnotify")
-        else:
-            logger.debug("timeout, polling ...")
+        except:
+            logger.warn(traceback.format_exc())
 
 
 

@@ -84,7 +84,7 @@ if __name__ == "__main__":
     logger = logsetup(logfile, loglevel)
 
     #
-    print("Main Block ... istest: ", utils.istest(EdgeConfig.getInstance()))
+    print("Main Block ...")
     poll.poll(logger)
     print("WARNING: Exit edgepoll")
 

@@ -24,12 +24,6 @@ def oneactionxml(sn, actionid, actiontype, args):
     xml += '</xml>'
     return xml
 
-def istest(ec):
-    if "5676" in ec.sn():
-        return True
-    else:
-        return False
-
 def reportactionresult(sn, actionid, actiontype, returncode, astdout, astderr):
     mydict = dict()
     mydict["sn"] = sn

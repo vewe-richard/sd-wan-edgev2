@@ -59,7 +59,7 @@ def servertask(ec):
     httpd = HTTPServer(('', ec.smsport()), SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-if __name__ == "__main__":
+if __name__ == "__main__1":
     cwd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     assert utils.runningUnderGitProjectRootDirectory(cwd)
     os.chdir(cwd)
@@ -78,3 +78,18 @@ if __name__ == "__main__":
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
     pservertask.join()
 
+# test new simpletun service version
+if __name__ == "__main__":
+    cwd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
+    assert utils.runningUnderGitProjectRootDirectory(cwd)
+    os.chdir(cwd)
+
+    ec = edgeconfig.EdgeConfig.getInstance()
+    ec.loadconfig("./config.json")
+    time.sleep(1)
+    # we can send pollnotify, if we know edge's ip address to fasten the polling
+    print(__file__, ": send pollnotify")
+    #opts = {"entry": "mainself", "cmd": "pollnotify"}
+    opts = {"entry": "http", "cmd": "cmd", "module": "stun"}
+    resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
+    print(__file__, resp.msg, resp.code)
