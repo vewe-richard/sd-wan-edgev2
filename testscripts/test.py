@@ -88,8 +88,11 @@ if __name__ == "__main__":
     ec.loadconfig("./config.json")
     time.sleep(1)
     # we can send pollnotify, if we know edge's ip address to fasten the polling
-    print(__file__, ": send pollnotify")
+    print(__file__, ": send msg")
     #opts = {"entry": "mainself", "cmd": "pollnotify"}
-    opts = {"entry": "http", "cmd": "cmd", "module": "stun"}
+    #opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "client", "server": "127.0.0.1", "port": "1299",
+    #        "tunortap": "tap", "ptunnelip": "192.168.23.19", "tunneltype": "ipsec"}
+    opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "port": "55556",
+            "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec"}
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
-    print(__file__, resp.msg, resp.code)
+    print(__file__, resp.getcode(), resp.read().decode("utf-8"))

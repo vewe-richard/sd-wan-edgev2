@@ -46,7 +46,13 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             # this is the message to Http class in init scripts
             elif mydict["entry"] == "http":
                 obj = self._inithandler.obj(mydict["module"])
-                obj.post(mydict)
+                rlt = obj.post(mydict)
+                self.send_response(200)
+                self.end_headers()
+                response = BytesIO()
+                response.write(rlt.encode())
+                self.wfile.write(response.getvalue())
+                return
         except:
             self._logger.info(traceback.format_exc())
             self.send_response(400)
@@ -115,7 +121,7 @@ def _poll(logger, myqueue, initHandler):
                 obj.post(msg)
         except Empty:
             logger.debug("timeout wait for queue")
-            break
+            #break
         except:
             logger.warn(traceback.format_exc())
 
