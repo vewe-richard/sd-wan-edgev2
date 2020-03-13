@@ -9,6 +9,12 @@ class HttpBase:
     def post(self, msg):
         pass
 
+    def term(self):
+        pass
+
+    def join(self):
+        pass
+
 class MainBase:
     def __init__(self, logger):
         self._logger = logger
@@ -18,4 +24,10 @@ class MainBase:
         pass
 
     def post(self, msg):
+        pass
+
+    def term(self):
+        pass
+
+    def join(self):
         pass

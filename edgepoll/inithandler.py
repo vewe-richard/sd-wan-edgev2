@@ -72,6 +72,7 @@ class InitHandler:
                 obj.start()
                 self._objs[name] = obj
             except:
+                self._logger.warn(traceback.format_exc())
                 pass
         elif entry == "main":
             try:
@@ -79,7 +80,10 @@ class InitHandler:
                 obj = cls(self._logger)
                 obj.start()
                 self._objs[name] = obj
+            except AttributeError as e:
+                self._logger.info("%s", str(e))
             except:
+                self._logger.warn(traceback.format_exc())
                 pass
             pass
 

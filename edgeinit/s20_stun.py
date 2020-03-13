@@ -1,26 +1,223 @@
-import _thread
+# reference: https://pypi.org/project/python-pytuntap/
+# apt-get install python3-pip
+# pip3 install python-pytuntap
+# https://docs.python.org/3/library/select.html
+import select
 import socket
-
+import time
 from edgeinit.base import HttpBase
 from pathlib import Path
 import json
 import traceback
+import multiprocessing
+import subprocess
+from tuntap import TunTap
 
-def serverthread(threadName, port):
-    print(threadName, port)
+class DataProcess(multiprocessing.Process):
+    def __init__(self, logger, devname, bridge, sock, **kwargs):
+        super().__init__(**kwargs)
+        self._logger = logger
+        self._devname = devname
+        self._bridge = bridge
+        self._socket = sock
 
-    # create a socket object
-    serversocket = socket.socket(
-        socket.AF_INET, socket.SOCK_STREAM)
-    # serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    serversocket.bind(("0.0.0.0", port))
+    def run(self):
+        self._logger.info("dataprocess: %s", self._devname)
+        # create devname
+        if "sdtap" in self._devname:
+            self.shell(["ip", "tuntap", "add", "mode", "tap", self._devname])
+            self.shell(["brctl", "addif", self._bridge, self._devname])
+            dev = TunTap(nic_type="Tap", nic_name=self._devname)
+        else:
+            self.shell(["ip", "tuntap", "add", "mode", "tun", self._devname])
+            dev = TunTap(nic_type="Tun", nic_name=self._devname)
 
-    while True:
+        self.shell(["ip", "link", "set", self._devname, "up"])
+
+        self._logger.info("tuntap fd %d, socket fd %d", dev.handle, self._socket.fileno())
+
+        inputs = [self._socket, dev.handle]
+        while True:
+            rfd, wfd, xfd = select.select(inputs, [], inputs)
+            for fd in rfd:
+                if fd == self._socket:
+                    data = self._socket.recv(1024)
+                    l = len(data)
+                    if l == 2:
+                        self._logger.info("length is 2")
+                        continue
+                    if data[0] == 0:
+                        r = dev.write(data[2:])
+                        self._logger.info("net2tap %s: towrite %d realout %d", self._devname, l - 2, r)
+
+                if fd == dev.handle:
+                    data = dev.read(1024)
+                    l = len(data)
+                    buf = bytearray(l.to_bytes(2, "big"))
+
+                    r1 = self._socket.send(buf)
+                    r2 = self._socket.send(data)
+                    self._logger.info("tap2net %s: len %d(%02x %02x) real out %d %d", self._devname, l, buf[0], buf[1], r1, r2)
+
+        while False:
+            try:
+                data = self._socket.recv(1024)
+            except KeyboardInterrupt:
+                dev.close()
+                self._socket.close()
+                break
+            self._logger.info("receive data, len %d", len(data))
+            if len(data) == 2:
+                continue
+            self._logger.info("%02x %02x %02x %02x", data[0], data[1], data[2], data[3])
+            if data[0] == 0:
+                self._logger.info("write to tap %s", self._devname)
+                dev.write(data[2:])
+
+
+    def devname(self):
+        return self._devname
+
+    def shell(self, args, ignoreerror = True):
+        self._logger.info("run %s", str(args))
+        #raise Exception("Failed")
+
+class NodeProcess(multiprocessing.Process):
+    def __init__(self, node, logger, **kwargs):
+        super().__init__(**kwargs)
+        self._node = node
+        self._logger = logger
+        self._counter = multiprocessing.Value("i", 0)
+
+        self._mgr = multiprocessing.Manager()
+        self._status = self._mgr.dict()
+        self._status["info"] = "INIT"
+        try:
+            self._ip = self._node["ptunnelip"]
+        except:
+            self._ip = self._node["tunnelip"]
+        self._tuntapid = 100
+        pass
+
+    def run(self):
+        try:
+            self.initloop()
+        except Exception as e:
+            self._logger.warn(traceback.format_exc())
+            self.setinfo(str(e))
+            return
+
+        while True:
+            try:
+                self.loop()
+            except KeyboardInterrupt:
+                self._logger.info("exit 1: node process is exited due to keyboard interrupt")
+                break
+
+    def initloop(self):
+        pass
+
+    def loop(self):
+        with self._counter.get_lock():
+            self._counter.value += 1
+        self._logger.info("in loop of node %s: %s", self.ip(), self.getinfo())
+        time.sleep(1)
+
+    def setinfo(self, s):
+        self._status["info"] = s
+
+    def getinfo(self):
+        return self._status["info"]
+
+    def counter(self):
+        v = 0
+        with self._counter.get_lock():
+            v = self._counter.value
+        return v
+
+    def ip(self):
+        return self._ip
+
+    def subnet3rd(self):
+        items = self._ip.split(".")
+        return items[2]
+
+    def bridgename(self):
+        return "sdtunnel-" + self.subnet3rd()
+
+    def tuntapname(self):
+        if self._node["tunortap"] == "tun":
+            prefix = "sdtun-" + self.subnet3rd()
+        else:
+            prefix = "sdtap-" + self.subnet3rd()
+        name = prefix + "-" + str(self._tuntapid)
+        self._tuntapid += 1
+        return name
+
+
+    def shell(self, args, ignoreerror = True):
+        self._logger.info("run %s", str(args))
+        #raise Exception("Failed")
+
+class ServerProcess(NodeProcess):
+    def initloop(self):
+        if self._node["tunortap"] == "tap":  #need create bridge
+            br = self.bridgename()
+            self._logger.debug("create bridge %s", br)
+
+            self.shell(["brctl", "addbr", br])
+            self.shell(["ip", "link", "set", br, "up"])
+            self.shell(["ip", "addr", "add", self._node["tunnelip"] + "/24", "dev", br])
+
+            self.setinfo("CREATE BRIDGE OK")
+        # create a socket object
+        serversocket = socket.socket(
+            socket.AF_INET, socket.SOCK_STREAM)
+        # serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        serversocket.bind(("0.0.0.0", int(self._node["port"])))
         serversocket.listen(5)
-        # establish a connection
-        clientsocket, addr = serversocket.accept()
-        print(clientsocket, addr)
+        self._serversocket = serversocket
 
+        self._connections = dict()
+        pass
+
+    def loop(self):
+        clientsocket, addr = self._serversocket.accept()
+        self._logger.info("%s, %s", str(clientsocket), str(addr))
+        try:
+            pre = self._connections[addr[0]]
+            dp = DataProcess(self._logger, pre.devname(), self.bridgename(), clientsocket)
+        except: #create it self
+            devname = self.tuntapname()
+            dp = DataProcess(self._logger, devname, self.bridgename(), clientsocket)
+
+        self._connections[addr[0]] = dp
+        dp.start()
+
+
+
+    def run(self):
+        try:
+            self.initloop()
+        except Exception as e:
+            self._logger.warn(traceback.format_exc())
+            self.setinfo(str(e))
+            return
+
+        while True:
+            try:
+                self.loop()
+            except KeyboardInterrupt:
+                for k, dp in self._connections.items():
+                    self._logger.info("exit 0: server wait for connection close")
+                    dp.join()
+                self._serversocket.close()
+                self._logger.info("exit 1: node process is exited due to keyboard interrupt --- close socket")
+                break
+
+
+
+class ClientProcess(NodeProcess):
     pass
 
 class Http(HttpBase):
@@ -29,6 +226,16 @@ class Http(HttpBase):
         self._datapath = str(Path.home()) + "/.sdwan/edgepoll/"
         self._configpath = self._datapath + "stun.json"
         self._data = []
+        self._nodes = dict()
+
+    def term(self):
+        for k, v in self._nodes.items():
+            v.terminate()
+
+    def join(self):
+        for k, v in self._nodes.items():
+            self._logger.info("join node %s: counter %d", k, v.counter())
+            v.join()
 
     def start(self):
         try:
@@ -47,8 +254,22 @@ class Http(HttpBase):
         pass
 
     def startnode(self, node):
-        _thread.start_new_thread(serverthread, ("serverthread", int(node["port"]),))
-        return "TODO"
+        try:
+            ip = node["ptunnelip"]
+        except:
+            ip = node["tunnelip"]
+
+        try:
+            self._nodes[ip]
+            return "OK"
+        except:
+            if node["node"] == "server":
+                np = ServerProcess(node, self._logger)
+            else:
+                np = ClientProcess(node, self._logger)
+        np.start()
+        self._nodes[ip] = np
+        return "OK"
 
     def addclient(self, msg):
         return "TODO"

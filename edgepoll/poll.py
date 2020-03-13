@@ -72,8 +72,20 @@ def notifypoll(logger, myqueue):
     SimpleHTTPRequestHandler._queue = myqueue
     SimpleHTTPRequestHandler._logger = logger
     SimpleHTTPRequestHandler._inithandler = ih
-    httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
-    httpd.serve_forever()
+    try:
+        httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        httpd.server_close()
+        time.sleep(2)  # wait a bit time before terminate those task force
+        for k, v in ih.objs().items():
+            logger.info("exit 2: terminate inithandlers, %s, %s", str(k), str(v))
+            v.term()
+
+        for k, v in ih.objs().items():
+            logger.info("exit 2: wait for join of inithandlers, %s, %s", str(k), str(v))
+            v.join()
+        logger.warn("exit 3: notifytask is break due to keyboardinterrupt")
 
 
 def poll(logger):
@@ -89,7 +101,10 @@ def poll(logger):
         logger.error(traceback.format_exc())
         traceback.print_exc()
     finally:
+        time.sleep(3) # wait a bit time before terminate those task force
         notifytask.terminate()
+        logger.warning("exit 4: wait for notifytask terminate")
+        notifytask.join()
 
 def _poll(logger, myqueue, initHandler):
     subprocess.Popen(["python3", "./testscripts/test.py"])
@@ -122,8 +137,11 @@ def _poll(logger, myqueue, initHandler):
         except Empty:
             logger.debug("timeout wait for queue")
             #break
+        except KeyboardInterrupt:
+            logger.warn("break poll thread due to keyboard interrupt")
+            break
         except:
             logger.warn(traceback.format_exc())
-
+            break
 
 
