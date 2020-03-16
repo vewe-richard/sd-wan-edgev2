@@ -92,7 +92,9 @@ if __name__ == "__main__":
     #opts = {"entry": "mainself", "cmd": "pollnotify"}
     #opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "client", "server": "127.0.0.1", "port": "1299",
     #        "tunortap": "tap", "ptunnelip": "192.168.23.19", "tunneltype": "ipsec"}
-    opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "port": "55556",
-            "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec"}
+    #opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "port": "55556",
+    #        "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec"}
+    opts = {"entry": "http", "module": "stun", "cmd": "delete", "node": "server", "port": "55556",
+            "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec", "remoteip": "10.129.101.99"}
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
     print(__file__, resp.getcode(), resp.read().decode("utf-8"))

@@ -3,6 +3,7 @@
 # pip3 install python-pytuntap
 # https://docs.python.org/3/library/select.html
 import select
+import signal
 import socket
 import time
 from edgeinit.base import HttpBase
@@ -12,17 +13,19 @@ import traceback
 import multiprocessing
 import subprocess
 from tuntap import TunTap
+import os
 
 class DataProcess(multiprocessing.Process):
-    def __init__(self, logger, devname, bridge, sock, **kwargs):
+    def __init__(self, logger, devname, bridge, sock, mgrdict, **kwargs):
         super().__init__(**kwargs)
         self._logger = logger
         self._devname = devname
         self._bridge = bridge
         self._socket = sock
+        self._mgrdict = mgrdict
+        self._dev = None
 
-    def run(self):
-        self._logger.info("dataprocess: %s", self._devname)
+    def prepareenv(self):  # TODO, handle error during shell calling
         # create devname
         if "sdtap" in self._devname:
             self.shell(["ip", "tuntap", "add", "mode", "tap", self._devname])
@@ -33,22 +36,37 @@ class DataProcess(multiprocessing.Process):
             dev = TunTap(nic_type="Tun", nic_name=self._devname)
 
         self.shell(["ip", "link", "set", self._devname, "up"])
+        self._dev = dev
+        self._mgrdict["pid"] = self.pid
+        pass
 
-        self._logger.info("tuntap fd %d, socket fd %d", dev.handle, self._socket.fileno())
-
+    def loop(self):
+        dev = self._dev
         inputs = [self._socket, dev.handle]
         while True:
             rfd, wfd, xfd = select.select(inputs, [], inputs)
+            self._logger.info("%s %s %s", str(rfd), str(wfd), str(xfd))
+            exit = False
+            for fd in xfd:
+                if fd == self._socket:
+                    self._logger.info("failed network")
+                    exit = True
+
             for fd in rfd:
                 if fd == self._socket:
                     data = self._socket.recv(1024)
                     l = len(data)
+                    if l == 0:
+                        exit = True
+                        break
                     if l == 2:
                         self._logger.info("length is 2")
                         continue
                     if data[0] == 0:
                         r = dev.write(data[2:])
                         self._logger.info("net2tap %s: towrite %d realout %d", self._devname, l - 2, r)
+                    else:
+                        r = dev.write(data)
 
                 if fd == dev.handle:
                     data = dev.read(1024)
@@ -58,22 +76,31 @@ class DataProcess(multiprocessing.Process):
                     r1 = self._socket.send(buf)
                     r2 = self._socket.send(data)
                     self._logger.info("tap2net %s: len %d(%02x %02x) real out %d %d", self._devname, l, buf[0], buf[1], r1, r2)
-
-        while False:
-            try:
-                data = self._socket.recv(1024)
-            except KeyboardInterrupt:
-                dev.close()
-                self._socket.close()
+            if exit:
                 break
-            self._logger.info("receive data, len %d", len(data))
-            if len(data) == 2:
-                continue
-            self._logger.info("%02x %02x %02x %02x", data[0], data[1], data[2], data[3])
-            if data[0] == 0:
-                self._logger.info("write to tap %s", self._devname)
-                dev.write(data[2:])
 
+    def run(self):
+        self._logger.info("DataProcess run: tuntap %s bridge %s <=> sock %d", self._devname, self._bridge, self._socket.fileno())
+        try:
+            self.prepareenv()
+        except:
+            self._logger.warn("DataProcess %s", traceback.format_exc())
+            self._mgrdict["status"] = traceback.format_exc()
+            # TODO, should close dev and socket?
+            return
+
+        self._mgrdict["status"] = "Enter Loop"
+        try:
+            self.loop()
+        except KeyboardInterrupt:
+            self._logger.warn("DataProcess KeyboardInterrupt")
+        except:
+            self._logger.warn("DataProcess %s", traceback.format_exc())
+        finally:
+            # TODO should I add try catch here
+            # TODO should I remove dev from bridge and delete tuntap device?
+            self._dev.close()
+            self._socket.close()
 
     def devname(self):
         return self._devname
@@ -97,6 +124,8 @@ class NodeProcess(multiprocessing.Process):
         except:
             self._ip = self._node["tunnelip"]
         self._tuntapid = 100
+        self._connections = dict()
+
         pass
 
     def run(self):
@@ -177,22 +206,25 @@ class ServerProcess(NodeProcess):
         serversocket.bind(("0.0.0.0", int(self._node["port"])))
         serversocket.listen(5)
         self._serversocket = serversocket
-
-        self._connections = dict()
         pass
+
+    def connections(self):
+        return self._connections
 
     def loop(self):
         clientsocket, addr = self._serversocket.accept()
         self._logger.info("%s, %s", str(clientsocket), str(addr))
+        mgrdict = self._mgr.dict()
         try:
             pre = self._connections[addr[0]]
-            dp = DataProcess(self._logger, pre.devname(), self.bridgename(), clientsocket)
+            dp = DataProcess(self._logger, pre.devname(), self.bridgename(), clientsocket, mgrdict)
         except: #create it self
             devname = self.tuntapname()
-            dp = DataProcess(self._logger, devname, self.bridgename(), clientsocket)
+            dp = DataProcess(self._logger, devname, self.bridgename(), clientsocket, mgrdict)
 
-        self._connections[addr[0]] = dp
         dp.start()
+        self._connections[addr[0]] = dp
+
 
 
 
@@ -323,6 +355,37 @@ class Http(HttpBase):
             result = "Unknown node: " + node
         return result
 
+    def delnode(self, node, msg):
+        if node == "client":
+            result = self.delclient(msg)
+        elif node == "server":
+            result = self.delserver(msg)
+        else:
+            result = "Unknown node: " + node
+        return result
+
+    def delserver(self, msg):
+        ip = msg["tunnelip"]
+        self._logger.info("nodes %s", str(self._nodes))
+
+        try:
+            np = self._nodes[ip]
+            self._logger.info("delserver: np %s", str(np))
+            cnts = np.connections()
+            self._logger.info("connections: %s", str(cnts))
+            fileno = cnts["10.129.101.99"]
+            self._logger.info("fileno: %s", fileno)
+            os.kill(fileno, signal.SIGINT)
+
+        except:
+            self._logger.info(traceback.format_exc())
+            self._logger.info("delserver: can not find server %s", ip)
+            pass
+        return "OK"
+
+    def delclient(self, msg):
+        return "OK"
+
     def post(self, msg):
         self._logger.debug("stun post handler: %s", str(msg))
         result = "NOK"
@@ -332,7 +395,8 @@ class Http(HttpBase):
                 node = msg["node"]
                 result = self.addnode(node, msg)
             elif msg["cmd"] == "delete":
-                result = "TODO"
+                node = msg["node"]
+                result = self.delnode(node, msg)
             else:
                 result = "Unknown command: " + cmd
         except:
