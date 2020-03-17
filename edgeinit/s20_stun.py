@@ -16,7 +16,7 @@ from tuntap import TunTap
 import os
 
 class DataProcess(multiprocessing.Process):
-    def __init__(self, logger, devname, bridge, sock, mgrdict, **kwargs):
+    def __init__(self, logger, devname, sock, mgrdict, bridge = None, **kwargs):
         super().__init__(**kwargs)
         self._logger = logger
         self._devname = devname
@@ -24,19 +24,24 @@ class DataProcess(multiprocessing.Process):
         self._socket = sock
         self._mgrdict = mgrdict
         self._dev = None
+        self._mgrdict["status"] = "INIT"
 
     def prepareenv(self):  # TODO, handle error during shell calling
         # create devname
         if "sdtap" in self._devname:
             self.shell(["ip", "tuntap", "add", "mode", "tap", self._devname])
-            self.shell(["brctl", "addif", self._bridge, self._devname])
             dev = TunTap(nic_type="Tap", nic_name=self._devname)
         else:
             self.shell(["ip", "tuntap", "add", "mode", "tun", self._devname])
             dev = TunTap(nic_type="Tun", nic_name=self._devname)
-
-        self.shell(["ip", "link", "set", self._devname, "up"])
         self._dev = dev
+        self.shell(["ip", "link", "set", self._devname, "up"])
+
+        if not self._bridge is None:
+            ret = self.shell(["brctl", "addif", self._bridge, self._devname])
+            if ret != 0:
+                raise Exception("Can not add tap dev to bridge")
+
         self._mgrdict["pid"] = self.pid
         pass
 
@@ -83,10 +88,16 @@ class DataProcess(multiprocessing.Process):
         self._logger.info("DataProcess run: tuntap %s bridge %s <=> sock %d", self._devname, self._bridge, self._socket.fileno())
         try:
             self.prepareenv()
-        except:
+        except Exception as e:
+            if not self._dev is None:
+                self._dev.close()
+            if "sdtap" in self._devname:
+                self.shell(["ip", "tuntap", "del", "mode", "tap", "name", self._devname])
+            else:
+                self.shell(["ip", "tuntap", "del", "mode", "tun", "name", self._devname])
+
             self._logger.warn("DataProcess %s", traceback.format_exc())
-            self._mgrdict["status"] = traceback.format_exc()
-            # TODO, should close dev and socket?
+            self._mgrdict["status"] = str(e)
             return
 
         self._mgrdict["status"] = "Enter Loop"
@@ -94,20 +105,23 @@ class DataProcess(multiprocessing.Process):
             self.loop()
         except KeyboardInterrupt:
             self._logger.warn("DataProcess KeyboardInterrupt")
-        except:
+        except Exception as e:
             self._logger.warn("DataProcess %s", traceback.format_exc())
+            self._mgrdict["status"] = str(e)
         finally:
-            # TODO should I add try catch here
-            # TODO should I remove dev from bridge and delete tuntap device?
             self._dev.close()
-            self._socket.close()
+            if "sdtap" in self._devname:
+                self.shell(["ip", "tuntap", "del", "mode", "tap", "name", self._devname])
+            else:
+                self.shell(["ip", "tuntap", "del", "mode", "tun", "name", self._devname])
 
     def devname(self):
         return self._devname
 
     def shell(self, args, ignoreerror = True):
-        self._logger.info("run %s", str(args))
-        #raise Exception("Failed")
+        self._logger.info("DataProcess: run %s", str(args))
+        sp = subprocess.run(args)
+        return sp.returncode
 
 class NodeProcess(multiprocessing.Process):
     def __init__(self, node, logger, **kwargs):
@@ -217,10 +231,10 @@ class ServerProcess(NodeProcess):
         mgrdict = self._mgr.dict()
         try:
             pre = self._connections[addr[0]]
-            dp = DataProcess(self._logger, pre.devname(), self.bridgename(), clientsocket, mgrdict)
+            dp = DataProcess(self._logger, pre.devname(), clientsocket, mgrdict, bridge = self.bridgename())
         except: #create it self
             devname = self.tuntapname()
-            dp = DataProcess(self._logger, devname, self.bridgename(), clientsocket, mgrdict)
+            dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
 
         dp.start()
         self._connections[addr[0]] = dp
@@ -417,10 +431,41 @@ class Http(HttpBase):
             return True
         else:
             return False
+# Test every module
 
 
+if __name__ == "__main__":
+    import logging
+    logger = logging.getLogger("edgepoll")
+    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
 
+    mgrdict = multiprocessing.Manager().dict()
 
+    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serversocket.bind(("0.0.0.0", 55556))
+    serversocket.listen(5)
+    clientsocket, addr = serversocket.accept()
+    logger.info("%s, %s", str(clientsocket), str(addr))
+
+    dp = DataProcess(logger, "sdtaptest", clientsocket, mgrdict, bridge="bridge999")
+    dp.start()
+
+    try:
+        dp.join()
+    except KeyboardInterrupt:
+        logger.warning("KeyboardInterrupt in Main")
+    finally:
+        clientsocket.close()
+        serversocket.close()
+        logger.warning("Close server socket and client socket")
+
+    try:
+        status = mgrdict["status"]
+    except Exception as e:
+        logger.warning("Can not access mgrdict due to %s", str(e))
+        status = "Unaccessable"
+    dp.join()
+    logger.warning("Exit, Dataprocess status: %s", status)
 
 
 
