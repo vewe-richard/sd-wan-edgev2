@@ -26,7 +26,7 @@ class DataProcess(multiprocessing.Process):
         self._dev = None
         self._mgrdict["status"] = "INIT"
 
-    def prepareenv(self):  # TODO, handle error during shell calling
+    def prepareenv(self):
         # create devname
         if "sdtap" in self._devname:
             self.shell(["ip", "tuntap", "add", "mode", "tap", self._devname])
@@ -49,38 +49,35 @@ class DataProcess(multiprocessing.Process):
         dev = self._dev
         inputs = [self._socket, dev.handle]
         while True:
-            rfd, wfd, xfd = select.select(inputs, [], inputs)
-            self._logger.info("%s %s %s", str(rfd), str(wfd), str(xfd))
+            rfd, wfd, xfd = select.select(inputs, [], [])
             exit = False
-            for fd in xfd:
-                if fd == self._socket:
-                    self._logger.info("failed network")
-                    exit = True
-
             for fd in rfd:
                 if fd == self._socket:
-                    data = self._socket.recv(1024)
+                    data = self._socket.recv(2048)
                     l = len(data)
                     if l == 0:
                         exit = True
                         break
-                    if l == 2:
-                        self._logger.info("length is 2")
+                    if l < 3:
+                        #self._logger.debug("net2tap: discard length %d", l)
                         continue
-                    if data[0] == 0:
+
+                    leninpkt = data[0]*256 + data[1] + 2
+                    if l == leninpkt:
                         r = dev.write(data[2:])
-                        self._logger.info("net2tap %s: towrite %d realout %d", self._devname, l - 2, r)
+                        self._logger.debug("net2tap %s: towrite %d realout %d", self._devname, l-2, r)
                     else:
                         r = dev.write(data)
+                        self._logger.debug("net2tap2 %s: towrite %d realout %d", self._devname, l, r)
 
                 if fd == dev.handle:
-                    data = dev.read(1024)
+                    data = dev.read(2048)
                     l = len(data)
                     buf = bytearray(l.to_bytes(2, "big"))
 
                     r1 = self._socket.send(buf)
                     r2 = self._socket.send(data)
-                    self._logger.info("tap2net %s: len %d(%02x %02x) real out %d %d", self._devname, l, buf[0], buf[1], r1, r2)
+                    #self._logger.debug("tap2net %s: len %d real out %d %d", self._devname, l, r1, r2)
             if exit:
                 break
 
@@ -124,147 +121,118 @@ class DataProcess(multiprocessing.Process):
         return sp.returncode
 
 class NodeProcess(multiprocessing.Process):
-    def __init__(self, node, logger, **kwargs):
+    def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(**kwargs)
         self._node = node
         self._logger = logger
-        self._counter = multiprocessing.Value("i", 0)
-
-        self._mgr = multiprocessing.Manager()
-        self._status = self._mgr.dict()
-        self._status["info"] = "INIT"
-        try:
-            self._ip = self._node["ptunnelip"]
-        except:
-            self._ip = self._node["tunnelip"]
-        self._tuntapid = 100
-        self._connections = dict()
-
+        self._mgrdict = mgrdict
+        self._mgrdict["status"] = "INIT"
         pass
 
     def run(self):
-        try:
-            self.initloop()
-        except Exception as e:
-            self._logger.warn(traceback.format_exc())
-            self.setinfo(str(e))
-            return
-
         while True:
-            try:
-                self.loop()
-            except KeyboardInterrupt:
-                self._logger.info("exit 1: node process is exited due to keyboard interrupt")
-                break
+            time.sleep(1)
+            #self._logger.debug("NodeProcess loop")
 
-    def initloop(self):
-        pass
-
-    def loop(self):
-        with self._counter.get_lock():
-            self._counter.value += 1
-        self._logger.info("in loop of node %s: %s", self.ip(), self.getinfo())
-        time.sleep(1)
-
-    def setinfo(self, s):
-        self._status["info"] = s
-
-    def getinfo(self):
-        return self._status["info"]
-
-    def counter(self):
-        v = 0
-        with self._counter.get_lock():
-            v = self._counter.value
-        return v
-
-    def ip(self):
-        return self._ip
-
-    def subnet3rd(self):
-        items = self._ip.split(".")
-        return items[2]
+    def shell(self, args, ignoreerror = True):
+        self._logger.info("NodeProcess run %s", str(args))
+        sp = subprocess.run(args)
+        return sp.returncode
 
     def bridgename(self):
-        return "sdtunnel-" + self.subnet3rd()
+        return "sdtunnel-" + self._subnet3rd
 
     def tuntapname(self):
         if self._node["tunortap"] == "tun":
-            prefix = "sdtun-" + self.subnet3rd()
+            prefix = "sdtun-" + self._subnet3rd
         else:
-            prefix = "sdtap-" + self.subnet3rd()
+            prefix = "sdtap-" + self._subnet3rd
         name = prefix + "-" + str(self._tuntapid)
         self._tuntapid += 1
         return name
 
+class ClientProcess(NodeProcess):
+    def __init__(self, node, logger, mgrdict, **kwargs):
+        super().__init__(node, logger, mgrdict, **kwargs)
+        self._ip = self._node["ptunnelip"]
+        items = self._ip.split(".")
+        self._subnet3rd = items[2]
+        self._tuntapid = 10
 
-    def shell(self, args, ignoreerror = True):
-        self._logger.info("run %s", str(args))
-        #raise Exception("Failed")
 
 class ServerProcess(NodeProcess):
-    def initloop(self):
+    def __init__(self, node, logger, mgrdict, **kwargs):
+        super().__init__(node, logger, mgrdict, **kwargs)
+        self._ip = self._node["tunnelip"]
+        items = self._ip.split(".")
+        self._subnet3rd = items[2]
+        self._tuntapid = 100
         if self._node["tunortap"] == "tap":  #need create bridge
             br = self.bridgename()
-            self._logger.debug("create bridge %s", br)
-
+            self.releasebridge(br)
             self.shell(["brctl", "addbr", br])
             self.shell(["ip", "link", "set", br, "up"])
-            self.shell(["ip", "addr", "add", self._node["tunnelip"] + "/24", "dev", br])
+            ret = self.shell(["ip", "addr", "add", self._ip + "/24", "dev", br])
+            if ret != 0:
+                #raise Exception("Can not create bridge")  TODO uncomment
+                pass
 
-            self.setinfo("CREATE BRIDGE OK")
-        # create a socket object
-        serversocket = socket.socket(
-            socket.AF_INET, socket.SOCK_STREAM)
-        # serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        serversocket.bind(("0.0.0.0", int(self._node["port"])))
-        serversocket.listen(5)
-        self._serversocket = serversocket
-        pass
+    def releasebridge(self, br):
+        ret = self.shell(["ip", "link", "show", br])
+        if ret == 0:
+            self.shell(["ip", "link", "set", br, "down"])
+            self.shell(["brctl", "delbr", br])
 
-    def connections(self):
-        return self._connections
-
-    def loop(self):
-        clientsocket, addr = self._serversocket.accept()
-        self._logger.info("%s, %s", str(clientsocket), str(addr))
-        mgrdict = self._mgr.dict()
-        try:
-            pre = self._connections[addr[0]]
-            dp = DataProcess(self._logger, pre.devname(), clientsocket, mgrdict, bridge = self.bridgename())
-        except: #create it self
-            devname = self.tuntapname()
-            dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
-
-        dp.start()
-        self._connections[addr[0]] = dp
-
-
-
+    def release(self):
+        if self._node["tunortap"] == "tap":  #need create bridge
+            br = self.bridgename()
+            self.releasebridge(br)
 
     def run(self):
+        # create a socket object
+        serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            self.initloop()
+            serversocket.bind(("0.0.0.0", int(self._node["port"])))
+            serversocket.listen(5)
         except Exception as e:
-            self._logger.warn(traceback.format_exc())
-            self.setinfo(str(e))
+            serversocket.close()
+            self.release()
+            self._logger.warning("NodeProcess %s", traceback.format_exc())
+            self._mgrdict["status"] = str(e)
             return
 
+        self._mgrdict["status"] = "Enter Loop"
+
+        try:
+            self.loop(serversocket)
+        except KeyboardInterrupt:
+            self._logger.warning("NodeProcess Loop exception, KeyboardInterrupt")
+        except Exception as e:
+            self._logger.warning("NodeProcess Loop exception, %s", traceback.format_exc())
+            self._mgrdict["status"] = str(e)
+        finally:
+            # TODO close dataprocesses, and close serversocket, release bridge
+            serversocket.close()
+            self.release()
+            pass
+
+    def loop(self, serversocket):
         while True:
+            clientsocket, addr = serversocket.accept()
+            self._logger.info("NodeProcess Accept: %s, %s", str(clientsocket), str(addr))
+            #TODO
+            '''
+            mgrdict = self._mgr.dict()
             try:
-                self.loop()
-            except KeyboardInterrupt:
-                for k, dp in self._connections.items():
-                    self._logger.info("exit 0: server wait for connection close")
-                    dp.join()
-                self._serversocket.close()
-                self._logger.info("exit 1: node process is exited due to keyboard interrupt --- close socket")
-                break
-
-
-
-class ClientProcess(NodeProcess):
-    pass
+                pre = self._connections[addr[0]]
+                dp = DataProcess(self._logger, pre.devname(), clientsocket, mgrdict, bridge = self.bridgename())
+            except: #create it self
+                devname = self.tuntapname()
+                dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
+    
+            dp.start()
+            self._connections[addr[0]] = dp
+            '''
 
 class Http(HttpBase):
     def __init__(self, logger):
@@ -434,7 +402,7 @@ class Http(HttpBase):
 # Test every module
 
 
-if __name__ == "__main__":
+if __name__ == "__main__1":
     import logging
     logger = logging.getLogger("edgepoll")
     logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
@@ -449,6 +417,14 @@ if __name__ == "__main__":
 
     dp = DataProcess(logger, "sdtaptest", clientsocket, mgrdict, bridge="bridge999")
     dp.start()
+
+    '''
+    input("Enter to test kill function")
+    pid = mgrdict["pid"]
+    logger.info("pid of DataProcess %d")
+    os.kill(pid, signal.SIGINT)
+    input("Enter to continue")
+    '''
 
     try:
         dp.join()
@@ -467,5 +443,52 @@ if __name__ == "__main__":
     dp.join()
     logger.warning("Exit, Dataprocess status: %s", status)
 
+if __name__ == "__main__":
+    import logging
+    import sys
+    logger = logging.getLogger("edgepoll")
+    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    logger.debug("%s", str(sys.argv))
 
+    node = dict()
+    node["port"] = "55556"
+    node["tunortap"] = "tap"
+    node["tunneltype"] = "ipsec"
+    mgrdict = multiprocessing.Manager().dict()
 
+    try:
+        if sys.argv[1] == "server":
+            node["node"] = "server"
+            node["tunnelip"] = "10.139.47.1"
+            np = ServerProcess(node, logger, mgrdict)
+        else:
+            node["node"] = "client"
+            node["tunnelip"] = sys.argv[2]
+            np = ClientProcess(node, logger, mgrdict)
+    except:
+        logger.info(traceback.format_exc())
+        logger.info("Usage: s20_tun.py server|client [ptunnelip]")
+        sys.exit(-1)
+
+    np.start()
+    while True:
+        cmd = input("Enter cmd:")
+        logger.info("cmd: %s, len %d", cmd, len(cmd))
+        if len(cmd) == 0:
+            break
+        if cmd == "info":
+            logger.debug("bridge name: %s, tuntap name: %s", np.bridgename(), np.tuntapname())
+
+    try:
+        np.join()
+    except KeyboardInterrupt:
+        logger.warning("KeyboardInterrupt in Main")
+
+    try:
+        status = mgrdict["status"]
+    except Exception as e:
+        logger.warning("Can not access mgrdict due to %s", str(e))
+        status = "Unaccessable"
+
+    np.join()
+    logger.warning("Exit, NodeProcess status: %s", status)
