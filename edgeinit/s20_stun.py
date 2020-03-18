@@ -31,6 +31,8 @@ class DataProcess(multiprocessing.Process):
         self._mgrdict = mgrdict
         self._dev = None
         self._mgrdict["status"] = "INIT"
+        self._mgrdict["recv"] = 0
+        self._mgrdict["send"] = 0
 
     def prepareenv(self):
         # create devname
@@ -70,6 +72,7 @@ class DataProcess(multiprocessing.Process):
                     l = len(data)
                     if l == 0:
                         exit = True
+                        self._mgrdict["status"] = "lost"
                         break
                     if l < 3:
                         #self._logger.debug("net2tap: discard length %d", l)
@@ -82,6 +85,7 @@ class DataProcess(multiprocessing.Process):
                     else:
                         r = dev.write(data)
                         self._logger.debug("net2tap2 %s: towrite %d realout %d", self._devname, l, r)
+                    self._mgrdict["recv"] += r
 
                 if fd == dev.handle:
                     data = dev.read(2048)
@@ -90,6 +94,7 @@ class DataProcess(multiprocessing.Process):
 
                     r1 = self._socket.send(buf)
                     r2 = self._socket.send(data)
+                    self._mgrdict["send"] += r2
                     #self._logger.debug("tap2net %s: len %d real out %d %d", self._devname, l, r1, r2)
             if exit:
                 break
@@ -110,7 +115,7 @@ class DataProcess(multiprocessing.Process):
             self._mgrdict["status"] = str(e)
             return
 
-        self._mgrdict["status"] = "Enter Loop"
+        self._mgrdict["status"] = "Running"
         signal.signal(signal.SIGUSR1, signal_kill2_handler)
         try:
             self.loop()
@@ -118,7 +123,7 @@ class DataProcess(multiprocessing.Process):
             self._logger.warn("DataProcess KeyboardInterrupt")
         except Kill2Exception as e:
             self._logger.warn("DataProcess Kill2Exception")
-            self._mgrdict["status"] = str(e)
+            self._mgrdict["status"] = "Exit"
         except Exception as e:
             self._logger.warn("DataProcess %s", traceback.format_exc())
             self._mgrdict["status"] = str(e)
@@ -186,6 +191,7 @@ class ServerProcess(NodeProcess):
         self._subnet3rd = items[2]
         self._tuntapid = 100
         self._connections = dict()
+        self._reconnecttimes = multiprocessing.Manager().dict()
         if self._node["tunortap"] == "tap":  #need create bridge
             br = self.bridgename()
             self.releasebridge(br)
@@ -220,7 +226,7 @@ class ServerProcess(NodeProcess):
             self._mgrdict["status"] = str(e)
             return
 
-        self._mgrdict["status"] = "Enter Loop"
+        self._mgrdict["status"] = "Running"
         self._mgrdict["pid"] = self.pid
         signal.signal(signal.SIGUSR1, signal_kill2_handler)
         try:
@@ -228,6 +234,8 @@ class ServerProcess(NodeProcess):
         except KeyboardInterrupt:
             self._logger.warning("NodeProcess Loop exception, KeyboardInterrupt")
         except Kill2Exception:
+            self._logger.warning("NodeProcess Kill2Exception")
+            self._mgrdict["status"] = "EXIT"
             for key, dp in self._connections.items():
                 dp.kill2()
         except Exception as e:
@@ -253,19 +261,43 @@ class ServerProcess(NodeProcess):
                 pre.terminate()
                 pre.join(timeout=0.1)
                 devname = pre.devname()
+                self._reconnecttimes[addr[0]] += 1
             except: #create it self
                 devname = self.tuntapname()
+                localstatus = dict()
+                self._reconnecttimes[addr[0]] = 0
 
             mgrdict = multiprocessing.Manager().dict()
             dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
             self._connections[addr[0]] = dp
+            self._mgrdict[addr[0]] = mgrdict
             dp.start()
+
+    def dpstatus(self):
+        dps = dict()
+        try:
+            for k, v in self._mgrdict.items():
+                if not "." in k:
+                    continue
+                try:
+                    status = dict()
+                    status["status"] = v["status"]
+                    status["reconnect"] = self._reconnecttimes[k]
+                    status["recv"] = v["recv"]
+                    status["send"] = v["send"]
+                    dps[k] = status
+                except:
+                    self._logger.warning(traceback.format_exc())
+                    pass
+        except:
+            pass
+        return dps
 
     def status(self):
         try:
             status = self._mgrdict["status"]
         except:
-            status = "Process Exited"
+            status = "Unaccessable"
         return status
 
     def kill2(self):
@@ -527,12 +559,12 @@ if __name__ == "__main__":
             break
         elif cmd == "status":
             logger.info("status: %s", np.status())
+            dps = np.dpstatus()
+            for k, v in dps.items():
+                logger.info("\t%s: %s, reconnect %d, recv %d, send %d", k, v["status"], v["reconnect"], v["recv"], v["send"])
 
-    try:
-        status = mgrdict["status"]
-    except Exception as e:
-        logger.warning("Can not access mgrdict due to %s", str(e))
-        status = "Unaccessable"
 
     np.join()
+    status = np.status()
+
     logger.warning("Exit, NodeProcess status: %s", status)
