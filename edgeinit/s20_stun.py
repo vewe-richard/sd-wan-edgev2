@@ -112,7 +112,7 @@ class DataProcess(multiprocessing.Process):
                 self.shell(["ip", "tuntap", "del", "mode", "tun", "name", self._devname])
 
             self._logger.warn("DataProcess %s", traceback.format_exc())
-            self._mgrdict["status"] = str(e)
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
             return
 
         self._mgrdict["status"] = "Running"
@@ -126,7 +126,7 @@ class DataProcess(multiprocessing.Process):
             self._mgrdict["status"] = "Exit"
         except Exception as e:
             self._logger.warn("DataProcess %s", traceback.format_exc())
-            self._mgrdict["status"] = str(e)
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
         finally:
             self._dev.close()
             if "sdtap" in self._devname:
@@ -150,45 +150,95 @@ class NodeProcess(multiprocessing.Process):
         self._logger = logger
         self._mgrdict = mgrdict
         self._mgrdict["status"] = "INIT"
+
+        self._ip = self._node["tunnelip"]
+        items = self._ip.split(".")
+        self._subnet3rd = items[2]
+        self._subnet4th = items[3]
         pass
 
     def run(self):
-        while True:
-            time.sleep(1)
-            #self._logger.debug("NodeProcess loop")
+        self._mgrdict["pid"] = self.pid
+        signal.signal(signal.SIGUSR1, signal_kill2_handler)
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self._logger.warning("NodeProcess Loop exception, KeyboardInterrupt")
+        except Kill2Exception:
+            self._logger.warning("NodeProcess Kill2Exception")
+            self._mgrdict["status"] = "Exit"
+        self._logger.warning("NodeProcess Exit")
 
     def shell(self, args, ignoreerror = True):
         self._logger.info("NodeProcess run %s", str(args))
         sp = subprocess.run(args)
         return sp.returncode
 
-    def bridgename(self):
-        return "sdtunnel-" + self._subnet3rd
+    def status(self):
+        try:
+            status = self._mgrdict["status"]
+        except:
+            status = "Unaccessable"
+        return status
 
-    def tuntapname(self):
-        if self._node["tunortap"] == "tun":
-            prefix = "sdtun-" + self._subnet3rd
-        else:
-            prefix = "sdtap-" + self._subnet3rd
-        name = prefix + "-" + str(self._tuntapid)
-        self._tuntapid += 1
-        return name
+    def kill2(self):
+        try:
+            pid = self._mgrdict["pid"]
+            os.kill(pid, signal.SIGUSR1)
+        except:
+            pass
+
+    def dpstatus(self):
+        return dict()
 
 class ClientProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(node, logger, mgrdict, **kwargs)
-        self._ip = self._node["ptunnelip"]
-        items = self._ip.split(".")
-        self._subnet3rd = items[2]
-        self._tuntapid = 10
 
+    def tuntapname(self):
+        if self._node["tunortap"] == "tun":
+            prefix = "sdtun-" + self._subnet3rd + "." + self._subnet4th
+        else:
+            prefix = "sdtap-" + self._subnet3rd + "." + self._subnet4th
+        return prefix
+
+    def run(self):
+        self._mgrdict["status"] = "Connecting"
+        self._mgrdict["pid"] = self.pid
+        signal.signal(signal.SIGUSR1, signal_kill2_handler)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.connect((self._node["server"], int(self._node["port"])))
+        except Exception as e:
+            self._logger.warning("ClientProcess %s", traceback.format_exc())
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
+            return
+
+        self._mgrdict["status"] = "Running"
+        try:
+            while True:
+                time.sleep(1)
+            #TODO start DataProcess, use join() to wait its end
+            #TODO need restart the connecting --------------------- 1.
+        except KeyboardInterrupt:
+            self._logger.warning("ClientProcess Loop exception, KeyboardInterrupt")
+        except Kill2Exception:
+            self._logger.warning("ClientProcess Kill2Exception")
+            self._mgrdict["status"] = "Exit"
+            #TODO kill dataprocess
+        except Exception as e:
+            self._logger.warning("ClientProcess Loop exception, %s", traceback.format_exc())
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
+        finally:
+            #TODO close client socket, DataProcess
+            pass
+        self._logger.warning("ClientProcess Exit")
 
 class ServerProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(node, logger, mgrdict, **kwargs)
-        self._ip = self._node["tunnelip"]
-        items = self._ip.split(".")
-        self._subnet3rd = items[2]
         self._tuntapid = 100
         self._connections = dict()
         self._reconnecttimes = multiprocessing.Manager().dict()
@@ -201,6 +251,18 @@ class ServerProcess(NodeProcess):
             if ret != 0:
                 raise Exception("Can not create bridge")
                 pass
+
+    def bridgename(self):
+        return "sdtunnel-" + self._subnet3rd
+
+    def tuntapname(self):
+        if self._node["tunortap"] == "tun":
+            prefix = "sdtun-" + self._subnet3rd
+        else:
+            prefix = "sdtap-" + self._subnet3rd
+        name = prefix + "-" + str(self._tuntapid)
+        self._tuntapid += 1
+        return name
 
     def releasebridge(self, br):
         ret = self.shell(["ip", "link", "show", br])
@@ -223,7 +285,7 @@ class ServerProcess(NodeProcess):
             serversocket.close()
             self.release()
             self._logger.warning("NodeProcess %s", traceback.format_exc())
-            self._mgrdict["status"] = str(e)
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
             return
 
         self._mgrdict["status"] = "Running"
@@ -240,7 +302,7 @@ class ServerProcess(NodeProcess):
                 dp.kill2()
         except Exception as e:
             self._logger.warning("NodeProcess Loop exception, %s", traceback.format_exc())
-            self._mgrdict["status"] = str(e)
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
         finally:
             for key, dp in self._connections.items():
                 dp.join(timeout=0.1)
@@ -293,20 +355,6 @@ class ServerProcess(NodeProcess):
             pass
         return dps
 
-    def status(self):
-        try:
-            status = self._mgrdict["status"]
-        except:
-            status = "Unaccessable"
-        return status
-
-    def kill2(self):
-        try:
-            pid = self._mgrdict["pid"]
-            os.kill(pid, signal.SIGUSR1)
-        except:
-            pass
-
 class Http(HttpBase):
     def __init__(self, logger):
         super().__init__(logger)
@@ -341,10 +389,7 @@ class Http(HttpBase):
         pass
 
     def startnode(self, node):
-        try:
-            ip = node["ptunnelip"]
-        except:
-            ip = node["tunnelip"]
+        ip = node["ptunnelip"]
 
         mgrdict = multiprocessing.Manager().dict()
         try:
@@ -379,9 +424,7 @@ class Http(HttpBase):
                         return "OK"
                 if n["port"] == port:
                     return "NOK, port conflict with previous server"
-                ip = n["tunnelip"]
-            elif n["node"] == "client":
-                ip = n["ptunnelip"]
+            ip = n["tunnelip"]
 
             #if same subnet, then return error
             if self.samesubnet(ip, tunnelip):
@@ -538,10 +581,11 @@ if __name__ == "__main__":
         else:
             node["node"] = "client"
             node["tunnelip"] = sys.argv[2]
+            node["server"] = sys.argv[3]
             np = ClientProcess(node, logger, mgrdict)
     except:
         logger.info(traceback.format_exc())
-        logger.info("Usage: s20_tun.py server|client [ptunnelip]")
+        logger.info("Usage: s20_tun.py server|client [tunnelip] [serverip]")
         sys.exit(-1)
 
     np.start()
@@ -552,7 +596,10 @@ if __name__ == "__main__":
             break
         logger.info("cmd: %s, len %d", cmd, len(cmd))
         if cmd == "info":
-            logger.info("bridge name: %s, tuntap name: %s", np.bridgename(), np.tuntapname())
+            if sys.argv[1] == "server":
+                logger.info("bridge name: %s, tuntap name: %s", np.bridgename(), np.tuntapname())
+            else:
+                logger.info("tuntap name: %s", np.tuntapname())
         elif cmd == "exit":
             np.kill2()
             logger.info("kill nodeprocess")
