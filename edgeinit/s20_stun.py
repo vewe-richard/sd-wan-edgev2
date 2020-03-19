@@ -155,6 +155,7 @@ class NodeProcess(multiprocessing.Process):
         items = self._ip.split(".")
         self._subnet3rd = items[2]
         self._subnet4th = items[3]
+        self._port = int(self._node["port"])
         pass
 
     def run(self):
@@ -196,6 +197,9 @@ class NodeProcess(multiprocessing.Process):
 class ClientProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(node, logger, mgrdict, **kwargs)
+        self._server = self._node["server"]
+        self._socket = None
+        self._dp = None
 
     def tuntapname(self):
         if self._node["tunortap"] == "tun":
@@ -205,36 +209,62 @@ class ClientProcess(NodeProcess):
         return prefix
 
     def run(self):
-        self._mgrdict["status"] = "Connecting"
         self._mgrdict["pid"] = self.pid
         signal.signal(signal.SIGUSR1, signal_kill2_handler)
         try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.connect((self._node["server"], int(self._node["port"])))
-        except Exception as e:
-            self._logger.warning("ClientProcess %s", traceback.format_exc())
-            self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
-            return
-
-        self._mgrdict["status"] = "Running"
-        try:
             while True:
-                time.sleep(1)
-            #TODO start DataProcess, use join() to wait its end
-            #TODO need restart the connecting --------------------- 1.
+                self.run2()
+                time.sleep(6)
         except KeyboardInterrupt:
             self._logger.warning("ClientProcess Loop exception, KeyboardInterrupt")
         except Kill2Exception:
+            try:
+                self._dp.kill2()
+            except Exception as e:
+                self._logger.warning("ClientProcess kill dataprocess failed: %s", str(e))
+
             self._logger.warning("ClientProcess Kill2Exception")
             self._mgrdict["status"] = "Exit"
-            #TODO kill dataprocess
         except Exception as e:
             self._logger.warning("ClientProcess Loop exception, %s", traceback.format_exc())
             self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
         finally:
-            #TODO close client socket, DataProcess
-            pass
+            try:
+                self._dp.join(timeout=0.1)
+            except Exception as e:
+                self._logger.warning("ClientProcess join dataprocess failed: %s", str(e))
+
+            if not self._socket is None:
+                self._socket.close()
+
+            try:
+                self._dp.terminate()
+            except Exception as e:
+                self._logger.warning("ClientProcess terminate dataprocess failed: %s", str(e))
         self._logger.warning("ClientProcess Exit")
+
+
+
+    def run2(self):
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self._socket = s
+            self._mgrdict["status"] = "Connecting"
+            s.connect((self._server, self._port))
+        except Exception as e:
+            self._logger.warning("ClientProcess %s", traceback.format_exc())
+            self._mgrdict["status"] = type(e).__name__ + ":" + str(e) + "-> Reconnecting"
+            return
+
+        mgrdict = multiprocessing.Manager().dict()
+        dp = DataProcess(self._logger, self.tuntapname(), s, mgrdict)
+        self._mgrdict["status"] = "Connecting"
+        self._mgrdict["dp"] = mgrdict
+        self._dp = dp
+        dp.start()
+        dp.join()
+        self._dp = None
+        self._mgrdict["status"] = "DataProcess Break -> Reconnecting"
 
 class ServerProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
@@ -279,7 +309,7 @@ class ServerProcess(NodeProcess):
         # create a socket object
         serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            serversocket.bind(("0.0.0.0", int(self._node["port"])))
+            serversocket.bind(("0.0.0.0", self._port))
             serversocket.listen(5)
         except Exception as e:
             serversocket.close()
@@ -326,7 +356,6 @@ class ServerProcess(NodeProcess):
                 self._reconnecttimes[addr[0]] += 1
             except: #create it self
                 devname = self.tuntapname()
-                localstatus = dict()
                 self._reconnecttimes[addr[0]] = 0
 
             mgrdict = multiprocessing.Manager().dict()
@@ -564,7 +593,7 @@ if __name__ == "__main__":
     import logging
     import sys
     logger = logging.getLogger("edgepoll")
-    logging.basicConfig(level=20, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     logger.debug("%s", str(sys.argv))
 
     node = dict()
