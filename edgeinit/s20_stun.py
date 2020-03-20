@@ -214,6 +214,7 @@ class ClientProcess(NodeProcess):
     def run(self):
         self._mgrdict["pid"] = self.pid
         signal.signal(signal.SIGUSR1, signal_kill2_handler)
+        self._mgrdict["status"] = "Connecting"
         try:
             while True:
                 self.run2()
@@ -252,7 +253,6 @@ class ClientProcess(NodeProcess):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket = s
-            self._mgrdict["status"] = "Connecting"
             s.connect((self._server, self._port))
         except Exception as e:
             self._logger.warning("ClientProcess %s", traceback.format_exc())
@@ -261,13 +261,27 @@ class ClientProcess(NodeProcess):
 
         mgrdict = multiprocessing.Manager().dict()
         dp = DataProcess(self._logger, self.tuntapname(), s, mgrdict, ip=self._ip)
-        self._mgrdict["status"] = "Connecting"
+        self._mgrdict["status"] = "Running"
         self._mgrdict["dp"] = mgrdict
         self._dp = dp
         dp.start()
         dp.join()
         self._dp = None
         self._mgrdict["status"] = "DataProcess Break -> Reconnecting"
+
+    def dpstatus(self):
+        dps = dict()
+        try:
+            v = self._mgrdict["dp"]
+            status = dict()
+            status["status"] = v["status"]
+            status["recv"] = v["recv"]
+            status["send"] = v["send"]
+            dps[self._ip] = status
+        except:
+            self._logger.warning(traceback.format_exc())
+            pass
+        return dps
 
 class ServerProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
@@ -389,10 +403,13 @@ class ServerProcess(NodeProcess):
 
 class Http(HttpBase):
     #external functions, init, term, join, start, post
-    def __init__(self, logger):
+    def __init__(self, logger, cfgfile=None):
         super().__init__(logger)
-        self._datapath = str(Path.home()) + "/.sdwan/edgepoll/"
-        self._configpath = self._datapath + "stun.json"
+        if cfgfile is None:
+            self._configpath = str(Path.home()) + "/.sdwan/edgepoll/stun.json"
+        else:
+            self._configpath = cfgfile
+        self._datapath = os.path.dirname(self._configpath)
         self._nodes = dict()
 
     def start(self):
@@ -462,7 +479,12 @@ class Http(HttpBase):
         self._nodes[snt] = np
 
     def stopnode(self, node):
-        raise Exception("TODO")
+        snt = self.subnet(node["tunnelip"])
+        self._logger.info("s20 stun stop node[%s]: %s", snt, str(node))
+        np = self._nodes[snt]
+        np.kill2()
+        np.join()
+        del self._nodes[snt]
 
     def post(self, msg):
         self._logger.debug("stun post handler: %s", str(msg))
@@ -473,6 +495,8 @@ class Http(HttpBase):
                 result = self.addnode(msg)
             elif msg["cmd"] == "delete":
                 result = self.delnode(msg)
+            elif msg["cmd"] == "query":
+                result = self.query(msg)
             else:
                 result = "Unknown command: " + cmd
         except Exception as e:
@@ -481,15 +505,67 @@ class Http(HttpBase):
 
         return result
 
+    def query(self, msg):
+        try:
+            snt = self.subnet(msg["tunnelip"])
+        except:  #return ip list of all nodes
+            ipl = []
+            for k, v in self._nodes.items():
+                ipl.append(k)
+            return str(ipl)
+
+        try:
+            np = self._nodes[snt]
+            status = np.dpstatus()
+            status["status"] = np.status()
+            return str(status)
+        except:
+            return "NOK"
+
     def addnode(self, msg):
         if not self.validnode(msg):
             return "Invalid node"
         try:
             self.startnode(msg)
-            raise Exception("add to json file")
-            return "OK"
+            if self.appendnode(msg):
+                return "OK"
+            else:
+                self.stopnode(msg)
+                return "NOK"
         except Exception as e:
             return "Exception " + type(e).__name__ + ":" + str(e)
+
+    def appendnode(self, node):
+        try:
+            with open(self._configpath) as json_file:
+                data = json.load(json_file)
+            data.append(node)
+            with open(self._configpath, 'w') as json_file:
+                json.dump(data, json_file)
+            return True
+        except:
+            self._logger.warning("append and update config file failed, %s", traceback.format_exc())
+            return False
+
+    def deletenode(self, node):
+        try:
+            with open(self._configpath) as json_file:
+                data = json.load(json_file)
+            index = 0
+            for i in data:
+                if i["tunnelip"] == node["tunnelip"]:
+                    break
+                index += 1
+            else:
+                self._logger.warning("Can not find match node in config file")
+                return False
+            del data[index]
+            with open(self._configpath, 'w') as json_file:
+                json.dump(data, json_file)
+            return True
+        except:
+            self._logger.warning("delete and update config file failed, %s", traceback.format_exc())
+            return False
 
     def delnode(self, msg):
         try:
@@ -502,7 +578,7 @@ class Http(HttpBase):
 
         try:
             self.stopnode(msg)
-            raise Exception("remove from json file")
+            self.deletenode(msg)
             return "OK"
         except Exception as e:
             return "Exception " + type(e).__name__ + ":" + str(e)
@@ -516,23 +592,19 @@ class Http(HttpBase):
             self._logger.info("stun join node %s", k)
             v.join()
 
-    def appendnode(self, node):
-        self._data.append(node)
-        with open(self._configpath, 'w') as json_file:
-            json.dump(self._data, json_file)
-
 # Test every module
 if __name__ == "__main__":
     import logging
     logger = logging.getLogger("edgepoll")
-    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
-    http = Http(logger)
+    logging.basicConfig(level=20, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    import sys
+    try:
+        cfgfile = sys.argv[2]
+        logger.warning("cfgfile %s", sys.argv[2])
+    except:
+        cfgfile = None
+    http = Http(logger, cfgfile)
     http.start()
-
-    opts = {"entry": "http", "module": "stun", "cmd": "delete", "node": "server", "port": "55556",
-            "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec", "remoteip": "10.129.101.99"}
-    #resp = http.post(opts)
-    #logger.info("resp: %s", resp)
 
     while True:
         try:
@@ -545,7 +617,25 @@ if __name__ == "__main__":
         elif cmd == "exit":
             http.term()
             break
+        elif cmd == "add":
+            opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "port": "55558",
+                    "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec", "remoteip": "10.139.101.99"}
+            resp = http.post(opts)
+            logger.info("resp: %s", resp)
+            pass
+        elif cmd == "delete":
+            opts = {"entry": "http", "module": "stun", "cmd": "delete", "node": "server", "tunnelip": "192.168.2.29"}
+            resp = http.post(opts)
+            logger.info("resp: %s", resp)
         elif cmd == "status":
+            opts = {"entry": "http", "module": "stun", "cmd": "query", "tunnelip": "10.139.47.1"}
+            resp = http.post(opts)
+            logger.info("resp: %s", resp)
+            pass
+        elif cmd == "list":
+            opts = {"entry": "http", "module": "stun", "cmd": "query"}
+            resp = http.post(opts)
+            logger.info("resp: %s", resp)
             pass
 
     http.join()
