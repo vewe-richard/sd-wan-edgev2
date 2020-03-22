@@ -12,7 +12,7 @@ class HttpBase:
     def term(self):
         pass
 
-    def join(self):
+    def join(self, timeout=None):
         pass
 
 class MainBase:
@@ -29,5 +29,5 @@ class MainBase:
     def term(self):
         pass
 
-    def join(self):
+    def join(self, timeout=None):
         pass

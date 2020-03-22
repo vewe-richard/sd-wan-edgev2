@@ -25,7 +25,7 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             cmd = mydict["CMD"]
             if cmd == "poll":
 #                xml = utils.oneactionxml("00010001", "100", "tunnel", '["python3", "scripts/tunnel.py", "-s", "-p", "5555"]')
-                xml = utils.oneactionxml("00010001", "100", "tunnel", '["python3", "scripts/tunnel.py", "-d", "-p", "5556"]')
+                xml = utils.oneactionxml("00020002", "100", "tunnel", '["python3", "scripts/tunnel.py", "-d", "-p", "5556"]')
                 return str.encode(xml)
             else:
                 return str.encode("UNKNOWN COMMAND: " + cmd)
@@ -59,7 +59,7 @@ def servertask(ec):
     httpd = HTTPServer(('', ec.smsport()), SimpleHTTPRequestHandler)
     httpd.serve_forever()
 
-if __name__ == "__main__1":
+if __name__ == "__main__":
     cwd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     assert utils.runningUnderGitProjectRootDirectory(cwd)
     os.chdir(cwd)
@@ -74,12 +74,17 @@ if __name__ == "__main__1":
     time.sleep(1)
     # we can send pollnotify, if we know edge's ip address to fasten the polling
     print(__file__, ": send pollnotify")
-    opts = {"cmd": "pollnotify"}
+    opts = {"entry": "mainself", "cmd": "notifypoll"}
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
-    pservertask.join()
+    try:
+        pservertask.join()
+    except KeyboardInterrupt:
+        print("test.py is break")
+    except Exception as e:
+        print("test.py exception", type(e).__name__, str(e))
 
 # test new simpletun service version
-if __name__ == "__main__":
+if __name__ == "__main__1":
     cwd = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
     assert utils.runningUnderGitProjectRootDirectory(cwd)
     os.chdir(cwd)
@@ -95,6 +100,6 @@ if __name__ == "__main__":
     #opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "port": "55556",
     #        "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec"}
     opts = {"entry": "http", "module": "stun", "cmd": "delete", "node": "server", "port": "55556",
-            "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec", "remoteip": "10.129.101.99"}
+            "tunortap": "tap", "tunnelip": "10.139.47.1", "tunneltype": "ipsec", "remoteip": "10.129.101.99"}
     resp = utils.http_post("127.0.0.1", ec.inputport(), "/", opts)
     print(__file__, resp.getcode(), resp.read().decode("utf-8"))

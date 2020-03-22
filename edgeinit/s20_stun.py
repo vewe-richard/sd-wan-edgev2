@@ -411,19 +411,15 @@ class Http(HttpBase):
             self._configpath = cfgfile
         self._datapath = os.path.dirname(self._configpath)
         self._nodes = dict()
-
-    def start(self):
-        data = []
         try:
             with open(self._configpath) as json_file:
-                data = json.load(json_file)
-        except FileNotFoundError:
-            Path(self._datapath).mkdir(parents=True, exist_ok=True)
-            with open(self._configpath, 'w') as json_file:
-                json.dump(data, json_file)
+                self._data = json.load(json_file)
         except:
-            self._logger.warn(traceback.format_exc())
-        for node in data:
+            self._data = []
+            logger.info("Http loading config %s", traceback.format_exc())
+
+    def start(self):
+        for node in self._data:
             #self._logger.info("stun start node: %s", str(node))
             if not self.validnode(node):
                 self._logger.info("stun start, invalid node %s", str(node))
@@ -472,9 +468,9 @@ class Http(HttpBase):
 
         mgrdict = multiprocessing.Manager().dict()
         if node["node"] == "server":
-            np = ServerProcess(node, logger, mgrdict)
+            np = ServerProcess(node, self._logger, mgrdict)
         else:
-            np = ClientProcess(node, logger, mgrdict)
+            np = ClientProcess(node, self._logger, mgrdict)
         np.start()
         self._nodes[snt] = np
 
@@ -537,11 +533,9 @@ class Http(HttpBase):
 
     def appendnode(self, node):
         try:
-            with open(self._configpath) as json_file:
-                data = json.load(json_file)
-            data.append(node)
             with open(self._configpath, 'w') as json_file:
-                json.dump(data, json_file)
+                json.dump(self._data, json_file)
+                self._data.append(node)
             return True
         except:
             self._logger.warning("append and update config file failed, %s", traceback.format_exc())
@@ -549,19 +543,17 @@ class Http(HttpBase):
 
     def deletenode(self, node):
         try:
-            with open(self._configpath) as json_file:
-                data = json.load(json_file)
             index = 0
-            for i in data:
+            for i in self._data:
                 if i["tunnelip"] == node["tunnelip"]:
                     break
                 index += 1
             else:
                 self._logger.warning("Can not find match node in config file")
                 return False
-            del data[index]
+            del self._data[index]
             with open(self._configpath, 'w') as json_file:
-                json.dump(data, json_file)
+                json.dump(self._data, json_file)
             return True
         except:
             self._logger.warning("delete and update config file failed, %s", traceback.format_exc())
@@ -574,10 +566,20 @@ class Http(HttpBase):
             if not msg["node"] in ["server", "client"]:
                 return "Invalid node type"
         except:
-            return "Invalid node"
+            try:
+                ip = self.findip(msg["port"])
+                msg["tunnelip"] = ip
+            except:
+                return "Invalid node, no tunnelip or port"
+            if ip == None:
+                return "Invalid node, can not find tunnelip from port"
 
         try:
             self.stopnode(msg)
+        except:
+            self._logger.info("stopnode exception %s", traceback.format_exc())
+
+        try:
             self.deletenode(msg)
             return "OK"
         except Exception as e:
@@ -587,16 +589,23 @@ class Http(HttpBase):
         for k, v in self._nodes.items():
             v.kill2()
 
-    def join(self):
+    def join(self, timeout=None):
         for k, v in self._nodes.items():
             self._logger.info("stun join node %s", k)
             v.join()
+
+    def findip(self, port):
+        for i in self._data:
+            if i["port"] == port:
+                return i["tunnelip"]
+        else:
+            return None
 
 # Test every module
 if __name__ == "__main__":
     import logging
     logger = logging.getLogger("edgepoll")
-    logging.basicConfig(level=20, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     import sys
     try:
         cfgfile = sys.argv[2]
@@ -604,6 +613,9 @@ if __name__ == "__main__":
     except:
         cfgfile = None
     http = Http(logger, cfgfile)
+    #print(http.test("55556"))
+    #sys.exit(0)
+
     http.start()
 
     while True:
@@ -619,7 +631,7 @@ if __name__ == "__main__":
             break
         elif cmd == "add":
             opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "port": "55558",
-                    "tunortap": "tap", "tunnelip": "192.168.2.29", "tunneltype": "ipsec", "remoteip": "10.139.101.99"}
+                    "tunortap": "tap", "tunnelip": "10.139.47.1", "tunneltype": "ipsec"}
             resp = http.post(opts)
             logger.info("resp: %s", resp)
             pass

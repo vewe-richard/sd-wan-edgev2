@@ -66,6 +66,7 @@ class Execute():
         env["SMSPORT"] = str(EdgeConfig.getInstance().smsport())
         env["PYTHONPATH"] = os.environ["PYTHONPATH"]
         env["CONFIGFILE"] = EdgeConfig.getInstance().configfile()
+        env["INPUTPORT"] = str(EdgeConfig.getInstance().inputport())
 #        try:
 #            env.append(params["env"])
 #        except:

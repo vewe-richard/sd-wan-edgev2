@@ -76,21 +76,23 @@ def notifypoll(logger, myqueue):
         httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
         httpd.serve_forever()
     except KeyboardInterrupt:
+        logger.info("break notifypoll thread due to keyboard interrupt")
+    except Exception as e:
+        logger.info(traceback.format_exc())
+    finally:
         httpd.server_close()
-        time.sleep(2)  # wait a bit time before terminate those task force
         for k, v in ih.objs().items():
-            logger.info("exit 2: terminate inithandlers, %s, %s", str(k), str(v))
+            logger.info("join of inithandlers.Http, %s, %s", str(k), str(v))
+            v.join(timeout=1)
+        for k, v in ih.objs().items():
+            logger.info("terminate of inithandlers.Http, %s, %s", str(k), str(v))
             v.term()
 
-        for k, v in ih.objs().items():
-            logger.info("exit 2: wait for join of inithandlers, %s, %s", str(k), str(v))
-            v.join()
-        logger.warn("exit 3: notifytask is break due to keyboardinterrupt")
+        logger.warn("exit 8: notifytask thread")
 
 
 def poll(logger):
     ih = InitHandler("main", logger)
-
     myqueue = Queue()
     notifytask = Process(target=notifypoll, args=(logger, myqueue))
     notifytask.start()
@@ -101,10 +103,18 @@ def poll(logger):
         logger.error(traceback.format_exc())
         traceback.print_exc()
     finally:
-        time.sleep(3) # wait a bit time before terminate those task force
+        notifytask.join(timeout=1)
+        logger.info("join of notifytask")
+        for k, v in ih.objs().items():
+            v.join(timeout=1)
+            logger.info("join of inithandlers.Main, %s, %s", str(k), str(v))
+
         notifytask.terminate()
-        logger.warning("exit 4: wait for notifytask terminate")
-        notifytask.join()
+        logger.info("terminate of notifytask")
+        for k, v in ih.objs().items():
+            logger.info("terminate of inithandlers.Main, %s, %s", str(k), str(v))
+            v.term()
+        logger.warning("exit 9: poll thread")
 
 def _poll(logger, myqueue, initHandler):
     subprocess.Popen(["python3", "./testscripts/test.py"])
