@@ -24,8 +24,10 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
         try:
             cmd = mydict["CMD"]
             if cmd == "poll":
-#                xml = utils.oneactionxml("00010001", "100", "tunnel", '["python3", "scripts/tunnel.py", "-s", "-p", "5555"]')
-                xml = utils.oneactionxml("00020002", "100", "tunnel", '["python3", "scripts/tunnel.py", "-d", "-p", "5556"]')
+                #xml = utils.oneactionxml("00090100", "100", "tunnel", '["python3", "scripts/tunnel.py", "-s", "-p", "5555", "-l", "10.139.27.1"]')
+                #xml = utils.oneactionxml("00020002", "100", "tunnel", '["python3", "scripts/tunnel.py", "-d", "-p", "1299"]')
+                xml = utils.oneactionxml("00090101", "100", "tunnel",
+                                         '["python3", "scripts/tunnel.py", "-c", "10.119.0.100", "-p", "5555", "-l", "10.139.27.100"]')
                 return str.encode(xml)
             else:
                 return str.encode("UNKNOWN COMMAND: " + cmd)

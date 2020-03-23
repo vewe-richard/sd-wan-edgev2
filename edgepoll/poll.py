@@ -117,7 +117,7 @@ def poll(logger):
         logger.warning("exit 9: poll thread")
 
 def _poll(logger, myqueue, initHandler):
-    subprocess.Popen(["python3", "./testscripts/test.py"])
+    #subprocess.Popen(["python3", "./testscripts/test.py"])
 
     ec = EdgeConfig.getInstance()
     timeout = ec.timeout()

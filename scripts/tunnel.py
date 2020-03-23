@@ -45,7 +45,7 @@ if __name__ == "__main__":
         elif o in "-p":
             port = v
         elif o in "-l":
-            localip = " -l " + v + " "
+            localip = v
         elif o in "-v":
             verbose = "-v"
         elif o in "-d":
@@ -55,7 +55,7 @@ if __name__ == "__main__":
     int(port)
     inputport = os.environ["INPUTPORT"]  #notifyport
     if remove:
-        opts = {"entry": "http", "module": "stun", "cmd": "delete", "port": "55556"}
+        opts = {"entry": "http", "module": "stun", "cmd": "delete", "port": port}
         resp = utils.http_post("127.0.0.1", inputport, "/", opts)
         result = ""
         if resp.getcode() == 200:
@@ -76,8 +76,24 @@ if __name__ == "__main__":
     cmdline = None
     for o, v in opts:
         if o in "-s":
-            print("simpletunnel server, port: ", port)
+            opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "server", "tunortap": "tap", "tunneltype": "ipsec", "port": port, "tunnelip": localip, }
+            resp = utils.http_post("127.0.0.1", inputport, "/", opts)
+            break
         elif o in '-c':
             ip = v
-    if not cmdline is None:
-        doreport(0, "OK", "")
+            opts = {"entry": "http", "module": "stun", "cmd": "add", "node": "client", "tunortap": "tap", "tunneltype": "ipsec", "port": port, "tunnelip": localip, "server": ip}
+            resp = utils.http_post("127.0.0.1", inputport, "/", opts)
+            break
+    else:
+        doreport(0, "NOK", "Invalid Command")
+        sys.exit(0)
+
+    if resp.getcode() == 200:
+        result = resp.read().decode("utf-8")
+        if result == "OK":
+            doreport(0, "OK", "")
+            sys.exit(0)
+    else:
+        result = "post to notifytask fail"
+
+    doreport(0, "NOK", result)

@@ -406,10 +406,18 @@ class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
         super().__init__(logger)
         if cfgfile is None:
-            self._configpath = str(Path.home()) + "/.sdwan/edgepoll/stun.json"
+            sp = subprocess.run(["ip", "netns", "identify"], stdout=subprocess.PIPE)
+            for l in sp.stdout.splitlines():
+                ns = l.decode()
+                if len(ns) > 3:
+                    self._configpath = "/home/richard/PycharmProjects/sd-wan-env/configs/stun-" + ns + ".json"
+                    break
+            else:
+                self._configpath = str(Path.home()) + "/.sdwan/edgepoll/stun.json"
         else:
             self._configpath = cfgfile
         self._datapath = os.path.dirname(self._configpath)
+        self._logger.info("stun http config: %s", self._configpath)
         self._nodes = dict()
         try:
             with open(self._configpath) as json_file:
@@ -462,7 +470,7 @@ class Http(HttpBase):
         try:
             self._nodes[snt]
             self._logger.info("s20 stun node[%s] is exist", snt)
-            return
+            return False
         except:
             pass
 
@@ -473,6 +481,7 @@ class Http(HttpBase):
             np = ClientProcess(node, self._logger, mgrdict)
         np.start()
         self._nodes[snt] = np
+        return True
 
     def stopnode(self, node):
         snt = self.subnet(node["tunnelip"])
@@ -522,20 +531,23 @@ class Http(HttpBase):
         if not self.validnode(msg):
             return "Invalid node"
         try:
-            self.startnode(msg)
-            if self.appendnode(msg):
-                return "OK"
+            append = self.startnode(msg)
+            if append:
+                if self.appendnode(msg):
+                    return "OK"
+                else:
+                    self.stopnode(msg)
+                    return "NOK"
             else:
-                self.stopnode(msg)
-                return "NOK"
+                return "OK"
         except Exception as e:
             return "Exception " + type(e).__name__ + ":" + str(e)
 
     def appendnode(self, node):
         try:
             with open(self._configpath, 'w') as json_file:
-                json.dump(self._data, json_file)
                 self._data.append(node)
+                json.dump(self._data, json_file)
             return True
         except:
             self._logger.warning("append and update config file failed, %s", traceback.format_exc())
