@@ -514,10 +514,14 @@ class Http(HttpBase):
         try:
             snt = self.subnet(msg["tunnelip"])
         except:  #return ip list of all nodes
-            ipl = []
-            for k, v in self._nodes.items():
-                ipl.append(k)
-            return str(ipl)
+            try:
+                snt = self.subnet(self.findip2(msg["port"], msg["node"]))
+            except:
+                self._logger.info(traceback.format_exc())
+                ipl = []
+                for k, v in self._nodes.items():
+                    ipl.append(k)
+                return str(ipl)
 
         try:
             np = self._nodes[snt]
@@ -609,6 +613,13 @@ class Http(HttpBase):
     def findip(self, port):
         for i in self._data:
             if i["port"] == port:
+                return i["tunnelip"]
+        else:
+            return None
+
+    def findip2(self, port, nodetype):
+        for i in self._data:
+            if i["port"] == port and i["node"] == nodetype:
                 return i["tunnelip"]
         else:
             return None

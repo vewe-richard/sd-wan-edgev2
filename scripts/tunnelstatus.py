@@ -6,10 +6,10 @@
 import subprocess
 import os
 import sys
+from edgeutils import utils
 
 def doreport(ret, out, err):
     try:
-        from edgeutils import utils
         report = utils.reportactionresult(os.environ["SN"], os.environ["ACTIONID"], os.environ["ACTIONTYPE"],
                                       ret, out, err)
         utils.http_post(os.environ["SMS"], os.environ["SMSPORT"], "/north/actionresult/", report)
@@ -25,56 +25,20 @@ if __name__ == "__main__":
         port = sys.argv[2]
         if "client" in sys.argv[1]:
             isclient = True
-            service = "simpletun.c." + port
+            opts = {"entry": "http", "module": "stun", "cmd": "query", "node": "client", "port": port}
         else:
             isclient = False
-            service = "simpletun.s." + port
+            opts = {"entry": "http", "module": "stun", "cmd": "query", "node": "server", "port": port}
     except:
         doreport(-1, str(sys.argv), "Error Parameters")
         sys.exit(-1)
 
     out = ""
+    resp = utils.http_post("127.0.0.1", 11112, "/", opts)
+    out += resp.read().decode("utf-8")
 
-    sp = subprocess.run(["systemctl", "status", service], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    tout = sp.stdout.decode()
-    terr = sp.stderr.decode()
-    tret = sp.returncode
-    if tret != 0:
-        doreport(tret, tout, terr)
-        sys.exit(-1)
-
-    tap = None
-    ip = None
-    for l in tout.splitlines():
-        if "Loaded:" in l:
-            out += l + "\n"
-        elif "Active:" in l:
-            out += l + "\n"
-        elif "scripts/tunnels" in l:
-            out += l + "\n"
-            if "-i" in l:
-                items = l.split("-i")
-                if "tap" in items[1]:
-                    its = items[1].split()
-                    tap = its[0]
-            if "-l" in l:
-                items = l.split("-l")
-                items = items[1].split()
-                its = items[0].split(".")
-                ip = its[0] + "." + its[1] + "." + its[2] + ".1"
-
-    if tap is None:
-        doreport(-1, out, "Can not find tap in systemctl status output")
-        sys.exit(-1)
-
-    if not isclient:
-        doreport(0, out, "")
-        sys.exit(0)
-
-    if ip is None:
-        doreport(-1, out, "Can not find ip in systemctl status output")
-        sys.exit(-1)
-
+    doreport(0, out, "")
+    '''
     sp = subprocess.run(["ping", "-I", tap, "-c", "3", "-W", "3", ip], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     tout = sp.stdout.decode()
     terr = sp.stderr.decode()
@@ -86,7 +50,7 @@ if __name__ == "__main__":
         sys.exit(-1)
 
     doreport(0, out, "")
-
+    '''
 
 
 
