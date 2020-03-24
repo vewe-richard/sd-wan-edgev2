@@ -14,6 +14,7 @@ import multiprocessing
 import subprocess
 from tuntap import TunTap
 import os
+from edgeinit.vpnprocess import VpnProcess
 
 class Kill2Exception(Exception):
     pass
@@ -625,7 +626,7 @@ class Http(HttpBase):
             return None
 
 # Test every module
-if __name__ == "__main__":
+if __name__ == "__main__3":
     import logging
     logger = logging.getLogger("edgepoll")
     logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
@@ -719,7 +720,7 @@ if __name__ == "__main__1":
     dp.join()
     logger.warning("Exit, Dataprocess status: %s", status)
 
-if __name__ == "__main__2":
+if __name__ == "__main__":
     import logging
     import sys
     logger = logging.getLogger("edgepoll")
@@ -737,11 +738,17 @@ if __name__ == "__main__2":
             node["node"] = "server"
             node["tunnelip"] = "10.139.47.1"
             np = ServerProcess(node, logger, mgrdict)
-        else:
+        elif sys.argv[1] == "client":
             node["node"] = "client"
             node["tunnelip"] = sys.argv[2]
             node["server"] = sys.argv[3]
             np = ClientProcess(node, logger, mgrdict)
+        elif sys.argv[1] == "vpn":
+            node["node"] = "vpn"
+            node["tunnelip"] = "10.139.17.100"
+            np = VpnProcess(node, logger, mgrdict)
+        else:
+            raise Exception("Unknown type")
     except:
         logger.info(traceback.format_exc())
         logger.info("Usage: s20_tun.py server|client [tunnelip] [serverip]")
