@@ -24,20 +24,32 @@ class VpnProcess(multiprocessing.Process):
         items = self._ip.split(".")
         self._subnet3rd = items[2]
         self._subnet4th = items[3]
+
+        #create default tap
+        self.shell(["ip", "tuntap", "add", "mode", "tap", self.tuntapname()])
+        rlt = self.shell(["ip", "link", "set", self.tuntapname(), "up"])
+        if rlt != 0:
+            self._mgrdict["status"] = "CAN NOT CREATE TAP"
+            raise Exception("VpnProcess: can not create tap")
         pass
+    def run2(self):
+        while True:
+            time.sleep(1)
+
 
     def run(self):
         self._mgrdict["pid"] = self.pid
         signal.signal(signal.SIGUSR1, signal_kill2_handler)
 
         try:
-            while True:
-                time.sleep(1)
+            self.run2()
         except KeyboardInterrupt:
             self._logger.warning("VpnProcess Loop exception, KeyboardInterrupt")
         except Kill2Exception:
             self._logger.warning("VpnProcess Kill2Exception")
             self._mgrdict["status"] = "Exit"
+        finally:
+            self.shell(["ip", "tuntap", "del", "mode", "tap", "name", self.tuntapname()])
         self._logger.warning("VpnProcess Exit")
 
     def shell(self, args, ignoreerror = True):

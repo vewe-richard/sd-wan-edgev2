@@ -728,7 +728,7 @@ if __name__ == "__main__":
     logger.debug("%s", str(sys.argv))
 
     node = dict()
-    node["port"] = "55556"
+    node["port"] = "5555"
     node["tunortap"] = "tap"
     node["tunneltype"] = "ipsec"
     mgrdict = multiprocessing.Manager().dict()
@@ -745,7 +745,8 @@ if __name__ == "__main__":
             np = ClientProcess(node, logger, mgrdict)
         elif sys.argv[1] == "vpn":
             node["node"] = "vpn"
-            node["tunnelip"] = "10.139.17.100"
+            node["tunnelip"] = "10.139.27.100"
+            node["server"] = ["10.119.0.100", "10.119.0.103:5556"]
             np = VpnProcess(node, logger, mgrdict)
         else:
             raise Exception("Unknown type")
