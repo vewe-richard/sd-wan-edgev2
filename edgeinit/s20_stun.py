@@ -36,10 +36,32 @@ class DataProcess(multiprocessing.Process):
         self._mgrdict["send"] = 0
         self._ip = ip
 
+    def fixmac(self, n):
+        mac = ""
+        for i in range(2, 12, 2):
+            mac += n[i:i+2] + ":"
+        return mac[:-1]
+
+    def assignmac(self, devname):
+        sp = subprocess.run(["ip", "link", "show", devname], stdout=subprocess.PIPE)
+        for l in sp.stdout.splitlines():
+            nl = l.decode()
+            if "link/ether" in nl:
+                items = nl.split()
+                try:
+                    oldmac = items[1]
+                    n = oldmac[:3] + self.fixmac(devname)
+                    newmac = n[:17]
+                    self._logger.debug(newmac)
+                    self.shell(["ip", "link", "set", "dev", devname, "address", newmac])
+                except:
+                    pass
+
     def prepareenv(self):
         # create devname
-        if "sdtap" in self._devname:
+        if "a." == self._devname[0:2]:
             self.shell(["ip", "tuntap", "add", "mode", "tap", self._devname])
+            self.assignmac(self._devname)
             dev = TunTap(nic_type="Tap", nic_name=self._devname)
         else:
             self.shell(["ip", "tuntap", "add", "mode", "tun", self._devname])
@@ -110,11 +132,10 @@ class DataProcess(multiprocessing.Process):
         except Exception as e:
             if not self._dev is None:
                 self._dev.close()
-            if "sdtap" in self._devname:
+            if "a." in self._devname:
                 self.shell(["ip", "tuntap", "del", "mode", "tap", "name", self._devname])
             else:
                 self.shell(["ip", "tuntap", "del", "mode", "tun", "name", self._devname])
-
             self._logger.warn("DataProcess %s", traceback.format_exc())
             self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
             return
@@ -133,7 +154,7 @@ class DataProcess(multiprocessing.Process):
             self._mgrdict["status"] = type(e).__name__ + ":" + str(e)
         finally:
             self._dev.close()
-            if "sdtap" in self._devname:
+            if "a." in self._devname:
                 self.shell(["ip", "tuntap", "del", "mode", "tap", "name", self._devname])
             else:
                 self.shell(["ip", "tuntap", "del", "mode", "tun", "name", self._devname])
@@ -198,19 +219,30 @@ class NodeProcess(multiprocessing.Process):
     def dpstatus(self):
         return dict()
 
+    def tuntapname(self, ip1, port, ip2):
+        if self._node["tunortap"] == "tun":
+            prefix = "u."
+        else:
+            prefix = "a."
+        l = []
+        items = ip1.split(".")
+        l.append(int(items[1]))
+        l.append(int(items[2]))
+        l.append(int(items[3]))
+        items = ip2.split(".")
+        l.append(int(items[2]))
+        l.append(int(items[3]))
+        s1 = "".join("{:02x}".format(c) for c in l)
+        s1 += hex(port%256)[2:]
+        return prefix + s1
+
+
 class ClientProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(node, logger, mgrdict, **kwargs)
         self._server = self._node["server"]
         self._socket = None
         self._dp = None
-
-    def tuntapname(self):
-        if self._node["tunortap"] == "tun":
-            prefix = "sdtun-" + self._subnet3rd + "." + self._subnet4th
-        else:
-            prefix = "sdtap-" + self._subnet3rd + "." + self._subnet4th
-        return prefix
 
     def run(self):
         self._mgrdict["pid"] = self.pid
@@ -246,6 +278,7 @@ class ClientProcess(NodeProcess):
                 self._dp.terminate()
             except Exception as e:
                 self._logger.warning("ClientProcess terminate dataprocess failed: %s", str(e))
+
         self._logger.warning("ClientProcess Exit")
 
 
@@ -261,7 +294,7 @@ class ClientProcess(NodeProcess):
             return
 
         mgrdict = multiprocessing.Manager().dict()
-        dp = DataProcess(self._logger, self.tuntapname(), s, mgrdict, ip=self._ip)
+        dp = DataProcess(self._logger, self.tuntapname(self._server, self._port, self._ip), s, mgrdict, ip=self._ip)
         self._mgrdict["status"] = "Running"
         self._mgrdict["dp"] = mgrdict
         self._dp = dp
@@ -287,7 +320,6 @@ class ClientProcess(NodeProcess):
 class ServerProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(node, logger, mgrdict, **kwargs)
-        self._tuntapid = 100
         self._connections = dict()
         self._reconnecttimes = multiprocessing.Manager().dict()
         if self._node["tunortap"] == "tap":  #need create bridge
@@ -302,15 +334,6 @@ class ServerProcess(NodeProcess):
 
     def bridgename(self):
         return "sdtunnel-" + self._subnet3rd
-
-    def tuntapname(self):
-        if self._node["tunortap"] == "tun":
-            prefix = "sdtun-" + self._subnet3rd
-        else:
-            prefix = "sdtap-" + self._subnet3rd
-        name = prefix + "-" + str(self._tuntapid)
-        self._tuntapid += 1
-        return name
 
     def releasebridge(self, br):
         ret = self.shell(["ip", "link", "show", br])
@@ -373,7 +396,7 @@ class ServerProcess(NodeProcess):
                 devname = pre.devname()
                 self._reconnecttimes[addr[0]] += 1
             except: #create it self
-                devname = self.tuntapname()
+                devname = self.tuntapname(addr[0], 0, self._ip)
                 self._reconnecttimes[addr[0]] = 0
 
             mgrdict = multiprocessing.Manager().dict()
@@ -720,6 +743,7 @@ if __name__ == "__main__1":
     dp.join()
     logger.warning("Exit, Dataprocess status: %s", status)
 
+
 if __name__ == "__main__":
     import logging
     import sys
@@ -745,7 +769,7 @@ if __name__ == "__main__":
             np = ClientProcess(node, logger, mgrdict)
         elif sys.argv[1] == "vpn":
             node["node"] = "vpn"
-            node["tunnelip"] = "10.139.27.100"
+            node["tunnelip"] = "10.139.27.101"
             node["server"] = ["10.119.0.100", "10.119.0.103:5556"]
             np = VpnProcess(node, logger, mgrdict)
         else:
@@ -763,10 +787,7 @@ if __name__ == "__main__":
             break
         logger.info("cmd: %s, len %d", cmd, len(cmd))
         if cmd == "info":
-            if sys.argv[1] == "server":
-                logger.info("bridge name: %s, tuntap name: %s", np.bridgename(), np.tuntapname())
-            else:
-                logger.info("tuntap name: %s", np.tuntapname())
+            pass
         elif cmd == "exit":
             np.kill2()
             logger.info("kill nodeprocess")

@@ -1,6 +1,7 @@
 #https://stackoverflow.com/questions/20476555/non-blocking-connect
-
+import binascii
 import multiprocessing
+import struct
 import traceback
 import signal
 import subprocess
@@ -82,22 +83,31 @@ class VpnProcess(multiprocessing.Process):
 
             rda.append(dev.handle)
 
-            self._logger.debug("select read %s;  write %s", self.listbrief(rda), self.listbrief(wra))
+            #self._logger.debug("select read %s;  write %s", self.listbrief(rda), self.listbrief(wra))
             rfd, wfd, xfd = select.select(rda, wra, [], 3)
             for f in rfd:
                 if f == dev.handle:
                     data = dev.read(2048)
                     self._logger.debug("tap %d got data %d", f, len(data))
+                    self.devdataprocess(infod, data)
                     continue
 
                 reconnect = False
                 try:
                     data = f.recv(2048)
-                    if len(data) == 0:
+                    l = len(data)
+                    if l == 0:
                         reconnect = True
                         self._logger.debug("socket %d got data: 0", f.fileno())
+                    elif l < 3:
+                        continue
                     else:
-                        self._logger.debug("socket %d got data: %d", f.fileno(), len(data))
+                        leninpkt = data[0] * 256 + data[1] + 2
+                        if l == leninpkt:
+                            r = self.netdataprocess(dev, self.getk(infod, f), data[2:], l-2)
+                        else:
+                            r = self.netdataprocess(dev, self.getk(infod, f), data, l)
+
                 except:
                     self._logger.debug(traceback.format_exc())  #TODO, we may recreate socket?
                     reconnect = True
@@ -106,6 +116,28 @@ class VpnProcess(multiprocessing.Process):
                     f.close()
                     pair = self.getk(infod, f)
                     infod[pair] = (f, True, time.time())
+
+    def devdataprocess(self, infod, data):
+        pass
+
+    #http://www.bitforestinfo.com/2017/01/how-to-write-simple-packet-sniffer.html
+    def netdataprocess(self, dev, pair, data, l):
+        self._logger.debug("%s len %d: %s", str(pair), l, str(data[0:14].hex()))
+        if l < 14:
+            self._logger.debug("incomplete packet, %d", l)
+            return
+        self._logger.debug(str(self.eth_header(data)))
+        return 0
+
+    def eth_header(self, data):
+        storeobj = data[0:14]
+        storeobj = struct.unpack("!6s6sH", storeobj)
+        destination_mac = binascii.hexlify(storeobj[0])
+        source_mac = binascii.hexlify(storeobj[1])
+        eth_protocol = storeobj[2]
+        return {"Destination Mac": destination_mac,
+                "Source Mac": source_mac,
+                "Protocol": eth_protocol}
 
     def listbrief(self, rda):
         brief = ""
@@ -165,6 +197,6 @@ class VpnProcess(multiprocessing.Process):
         return dict()
 
     def tuntapname(self):
-        prefix = "sdtap-" + self._subnet3rd + "." + self._subnet4th
+        prefix = "v." + self._ip
         return prefix
 
