@@ -39,6 +39,7 @@ class VpnProcess(multiprocessing.Process):
         pass
 
     def run2(self):
+        self._macinfo = dict()
         infod = dict()
         for s in self._node["server"]:
             items = s.split(":")
@@ -88,8 +89,9 @@ class VpnProcess(multiprocessing.Process):
             for f in rfd:
                 if f == dev.handle:
                     data = dev.read(2048)
-                    self._logger.debug("tap %d got data %d", f, len(data))
-                    self.devdataprocess(infod, data)
+                    #self._logger.debug("tap %d got data %d", f, len(data))
+                    l = len(data)
+                    self.devdataprocess(infod, data, l)
                     continue
 
                 reconnect = False
@@ -104,9 +106,9 @@ class VpnProcess(multiprocessing.Process):
                     else:
                         leninpkt = data[0] * 256 + data[1] + 2
                         if l == leninpkt:
-                            r = self.netdataprocess(dev, self.getk(infod, f), data[2:], l-2)
+                            self.netdataprocess(dev, self.getk(infod, f), data[2:], l-2)
                         else:
-                            r = self.netdataprocess(dev, self.getk(infod, f), data, l)
+                            self.netdataprocess(dev, self.getk(infod, f), data, l)
 
                 except:
                     self._logger.debug(traceback.format_exc())  #TODO, we may recreate socket?
@@ -117,17 +119,93 @@ class VpnProcess(multiprocessing.Process):
                     pair = self.getk(infod, f)
                     infod[pair] = (f, True, time.time())
 
-    def devdataprocess(self, infod, data):
-        pass
-
-    #http://www.bitforestinfo.com/2017/01/how-to-write-simple-packet-sniffer.html
-    def netdataprocess(self, dev, pair, data, l):
-        self._logger.debug("%s len %d: %s", str(pair), l, str(data[0:14].hex()))
+    def devdataprocess(self, infod, data, l):
         if l < 14:
             self._logger.debug("incomplete packet, %d", l)
+            raise Exception("TODO") #to uncomment
             return
-        self._logger.debug(str(self.eth_header(data)))
-        return 0
+        #self._logger.debug(str(self.eth_header(data[0:14])))
+        storeobj = struct.unpack("!6s6sH", data[0:14])
+
+        eth_protocol = storeobj[2]
+        #self._logger.debug("protocol, %s", hex(eth_protocol))
+        if eth_protocol == 0x0806 or eth_protocol == 0x0800: # ARP and IP packet
+            pass
+        elif eth_protocol == 0x86dd: #IPV6
+            #self._logger.debug("netdataprocess IPV6, discard it")
+            return
+        else:
+            self._logger.debug("unprocessed protocol %s", hex(eth_protocol))
+            return
+        self._logger.debug("send back packet, dst mac: %s", binascii.hexlify(storeobj[0]))
+        # find socket from mac
+        sock = self.querymactable(self._macinfo, infod, storeobj[0])
+        if sock is None:
+            return
+
+        c = len(data)
+        buf = bytearray(c.to_bytes(2, "big"))
+
+        r1 = sock.send(buf)
+        r2 = sock.send(data)
+
+        pass
+
+    def querymactable(self, macinfo, infod, mac):
+        for k, v in macinfo.items():
+            if v[0] == mac:
+                break
+        else:
+            self._logger.info("Can not find socket form mac %s", binascii.hexlify(mac))
+            return None
+        try:
+            return infod[k][0]
+        except:
+            self._logger.info("!Can not find socket form mac %s", binascii.hexlify(mac))
+            return None
+
+    #http://www.bitforestinfo.com/2017/01/how-to-write-simple-packet-sniffer.html
+    #query: cn.bing.com => wiki wireshark arp
+    def netdataprocess(self, dev, pair, data, l):
+        #self._logger.debug("%s data in, len %d: %s", str(pair), l, str(data[0:14].hex()))
+        if l < 14:
+            self._logger.debug("incomplete packet, %d", l)
+            raise Exception("TODO") #to uncomment
+            return
+
+        #self._logger.debug(str(self.eth_header(data[0:14])))
+        storeobj = struct.unpack("!6s6sH", data[0:14])
+
+        eth_protocol = storeobj[2]
+        if eth_protocol == 0x0806:  #ARP packet
+            #https://www.educba.com/arp-packet-format/
+            storeobj = struct.unpack("!HHccH", data[14:22])
+            hrd = storeobj[0]
+            if hrd == 1:  #ethernet
+                pro = storeobj[1]
+                if pro != 2048:
+                    self._logger.debug("unknown ARP Pro %d", pro)
+                    return
+                op = storeobj[4]
+                if op == 1: #Arp Request
+                    storeobj = struct.unpack("!6s4s6s4s", data[22:42])
+                    s = (storeobj[0], storeobj[1])
+                    self._macinfo[pair] = s
+                    #self._logger.debug(str(storeobj))
+                    self._logger.debug("Mac record for %s, mac: %s, ip: %s", pair, binascii.hexlify(s[0]), binascii.hexlify(s[1]))
+        elif eth_protocol == 0x0800: #IP packet
+            pass
+        elif eth_protocol == 0x86dd: #IPV6
+            #self._logger.debug("netdataprocess IPV6, discard it")
+            return
+        else:
+            self._logger.debug("unprocessed protocol %s", hex(eth_protocol))
+            return
+
+        r = dev.write(data)
+        if r != l:
+            self._logger.warning("Warning: write to tap (%d) is smaller than request (%d)", r, l)
+        return
 
     def eth_header(self, data):
         storeobj = data[0:14]
