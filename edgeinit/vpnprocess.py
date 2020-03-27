@@ -129,7 +129,21 @@ class VpnProcess(multiprocessing.Process):
 
         eth_protocol = storeobj[2]
         #self._logger.debug("protocol, %s", hex(eth_protocol))
-        if eth_protocol == 0x0806 or eth_protocol == 0x0800: # ARP and IP packet
+        if eth_protocol == 0x0806: #ARP and
+            if storeobj[0].find(b'\xff\xff\xff\xff\xff\xff') == 0:
+                self._logger.debug("ARP broadcast")
+                # we should send through all connected tunnels
+                for k, v in infod.items():
+                    c = len(data)
+                    buf = bytearray(c.to_bytes(2, "big"))
+                    sock = v[0]
+                    r1 = sock.send(buf)
+                    r2 = sock.send(data)
+                return
+        elif eth_protocol == 0x0800: #  IP packet
+            dstip = data[14+16:34]
+            if self.vpnroute(infod, dstip, data):
+                return
             pass
         elif eth_protocol == 0x86dd: #IPV6
             #self._logger.debug("netdataprocess IPV6, discard it")
@@ -150,6 +164,46 @@ class VpnProcess(multiprocessing.Process):
         r2 = sock.send(data)
 
         pass
+
+    def vpnroute(self, infod, dstip, data):
+        self._logger.debug("ip: %s", binascii.hexlify(dstip))
+        if dstip.find(b'\xc0\xa8\x16\x37') == 0: #the ip to be route to vpn tunnel
+            self._logger.debug("this ip should use vpn route")
+            defaultmac = None
+            vpnmac = None
+            vpnsock = None
+            for k, v in self._macinfo.items():
+                self._logger.debug(str(k))
+                if k[0].find('10.119.0.103') == 0:
+                    vpnmac = v[0]
+                    try:
+                        vpnsock = infod[k][0]
+                    except:
+                        pass
+                    pass
+                elif k[0].find('10.119.0.100') == 0:
+                    defaultmac = v[0]
+                    pass
+            if vpnmac is None:
+                self._logger.debug("can not find vpn mac, you may wake it through ping 10.139.27.2?")
+                return False
+            self._logger.debug("vpnmac %s, defaultmac %s", binascii.hexlify(vpnmac), binascii.hexlify(defaultmac))
+            if vpnsock is None:
+                self._logger.debug("Can not get vpn socket")
+                return False
+            newd = vpnmac + data[6:]
+            #self._logger.debug("%s, %s", type(newd), binascii.hexlify(newd[0:12]))
+            #return False
+            c = len(newd)
+            buf = bytearray(c.to_bytes(2, "big"))
+
+            r1 = vpnsock.send(buf)
+            r2 = vpnsock.send(newd)
+            return True
+
+
+
+        return False
 
     def querymactable(self, macinfo, infod, mac):
         for k, v in macinfo.items():
@@ -187,12 +241,14 @@ class VpnProcess(multiprocessing.Process):
                     self._logger.debug("unknown ARP Pro %d", pro)
                     return
                 op = storeobj[4]
-                if op == 1: #Arp Request
+                if op == 1 or op == 2: #Arp Request and Arp Reply
                     storeobj = struct.unpack("!6s4s6s4s", data[22:42])
                     s = (storeobj[0], storeobj[1])
                     self._macinfo[pair] = s
                     #self._logger.debug(str(storeobj))
                     self._logger.debug("Mac record for %s, mac: %s, ip: %s", pair, binascii.hexlify(s[0]), binascii.hexlify(s[1]))
+                else:
+                    self._logger.debug("ARP op unprocessed %d", op)
         elif eth_protocol == 0x0800: #IP packet
             pass
         elif eth_protocol == 0x86dd: #IPV6
