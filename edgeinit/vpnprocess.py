@@ -1,7 +1,9 @@
 #https://stackoverflow.com/questions/20476555/non-blocking-connect
 import binascii
+import json
 import multiprocessing
 import struct
+from struct import pack
 import traceback
 import signal
 import subprocess
@@ -10,6 +12,8 @@ import os
 import socket
 import errno
 import select
+from pathlib import Path
+
 from tuntap import TunTap
 
 class Kill2Exception(Exception):
@@ -38,18 +42,48 @@ class VpnProcess(multiprocessing.Process):
             raise Exception("VpnProcess: can not create tap")
         pass
 
+    def loadvpncfg(self, server):
+        try:
+            vpncfgpath = server["allowips"]
+        except:
+            return None, None
+
+        if not vpncfgpath[0] == "/":
+            p = os.getcwd() + "/" + vpncfgpath
+            if not os.path.exists(p):
+                p = str(Path.home()) + "/.sdwan/edgepoll/" + vpncfgpath
+            vpncfgpath = p
+
+        try:
+            with open(vpncfgpath) as json_file:
+                obj = json.load(json_file)
+        except:
+            return vpncfgpath, []
+
+        vpncfgobj = []
+        for i in obj:
+            vpncfgobj.append(socket.inet_aton(i))
+        return vpncfgpath, vpncfgobj
+
     def run2(self):
         self._macinfo = dict()
         infod = dict()
+        self._vpncfglist = []
         for s in self._node["server"]:
-            items = s.split(":")
-            ip = items[0]
-            if len(items) > 1:
-                port = int(items[1])
-            else:
+            try:
+                port = int(s["port"])
+            except:
                 port = int(self._node["port"])
-            pair = (ip, port)
+            pair = (s["ip"], port)
             infod[pair] = None
+
+            try:
+                vpntunnelip = s["tunnelip"]
+            except:
+                vpntunnelip = None
+            vpncfgpath, vpncfgobj = self.loadvpncfg(s)
+            self._vpncfglist.append((pair, vpntunnelip, vpncfgpath, vpncfgobj))
+        self._logger.debug(str(self._vpncfglist))
         self._logger.info("run2 servers: %s", str(infod))
         dev = TunTap(nic_type="Tap", nic_name=self.tuntapname())
         dev.config(self._ip, "255.255.255.0")
@@ -129,6 +163,7 @@ class VpnProcess(multiprocessing.Process):
 
         eth_protocol = storeobj[2]
         #self._logger.debug("protocol, %s", hex(eth_protocol))
+        sock = None
         if eth_protocol == 0x0806: #ARP and
             if storeobj[0].find(b'\xff\xff\xff\xff\xff\xff') == 0:
                 self._logger.debug("ARP broadcast")
@@ -137,24 +172,29 @@ class VpnProcess(multiprocessing.Process):
                     c = len(data)
                     buf = bytearray(c.to_bytes(2, "big"))
                     sock = v[0]
+                    if sock is None:
+                        continue
                     r1 = sock.send(buf)
                     r2 = sock.send(data)
                 return
         elif eth_protocol == 0x0800: #  IP packet
             dstip = data[14+16:34]
-            if self.vpnroute(infod, dstip, data):
-                return
-            pass
+            sock, data =  self.vpnroute(infod, dstip, data)
         elif eth_protocol == 0x86dd: #IPV6
             #self._logger.debug("netdataprocess IPV6, discard it")
             return
         else:
             self._logger.debug("unprocessed protocol %s", hex(eth_protocol))
             return
-        self._logger.debug("send back packet, dst mac: %s", binascii.hexlify(storeobj[0]))
-        # find socket from mac
-        sock = self.querymactable(self._macinfo, infod, storeobj[0])
+
+        #self._logger.debug("send back packet, dst mac: %s", binascii.hexlify(storeobj[0]))
+
         if sock is None:
+            # find socket from mac
+            sock = self.querymactable(self._macinfo, infod, storeobj[0])
+
+        if sock is None:
+            self._logger.debug("socket is None, can not reply packet")
             return
 
         c = len(data)
@@ -165,45 +205,83 @@ class VpnProcess(multiprocessing.Process):
 
         pass
 
-    def vpnroute(self, infod, dstip, data):
-        self._logger.debug("ip: %s", binascii.hexlify(dstip))
-        if dstip.find(b'\xc0\xa8\x16\x37') == 0: #the ip to be route to vpn tunnel
-            self._logger.debug("this ip should use vpn route")
-            defaultmac = None
-            vpnmac = None
-            vpnsock = None
-            for k, v in self._macinfo.items():
-                self._logger.debug(str(k))
-                if k[0].find('10.119.0.103') == 0:
-                    vpnmac = v[0]
-                    try:
-                        vpnsock = infod[k][0]
-                    except:
-                        pass
-                    pass
-                elif k[0].find('10.119.0.100') == 0:
-                    defaultmac = v[0]
-                    pass
-            if vpnmac is None:
-                self._logger.debug("can not find vpn mac, you may wake it through ping 10.139.27.2?")
-                return False
-            self._logger.debug("vpnmac %s, defaultmac %s", binascii.hexlify(vpnmac), binascii.hexlify(defaultmac))
-            if vpnsock is None:
-                self._logger.debug("Can not get vpn socket")
-                return False
-            newd = vpnmac + data[6:]
-            #self._logger.debug("%s, %s", type(newd), binascii.hexlify(newd[0:12]))
-            #return False
-            c = len(newd)
+    def findpair(self, ip):
+        for l in self._vpncfglist:
+            if l[3] is None:
+                continue
+            if ip in l[3]:
+                return l[0], l[1]
+        return None
+
+    def broadcast(self, infod, source_mac, targetip):
+        bcast_mac = pack('!6B', *(0xFF,) * 6)
+        zero_mac = pack('!6B', *(0x00,) * 6)
+        ARPOP_REQUEST = pack('!H', 0x0001)
+        ARPOP_REPLY = pack('!H', 0x0002)
+        # Ethernet protocol type (=ARP)
+        ETHERNET_PROTOCOL_TYPE_ARP = pack('!H', 0x0806)
+        # ARP logical protocol type (Ethernet/IP)
+        ARP_PROTOCOL_TYPE_ETHERNET_IP = pack('!HHBB', 0x0001, 0x0800, 0x0006, 0x0004)
+        #self._logger.debug("%s %s", str(source_mac), binascii.hexlify(source_mac))
+        #self._logger.debug("target ip %s, source ip %s", targetip, self._node["tunnelip"])
+
+        sender_ip = pack('!4B', *[int(x) for x in self._node["tunnelip"].split('.')])
+        target_ip = pack('!4B', *[int(x) for x in targetip.split('.')])
+
+        arpframe = [
+            # ## ETHERNET
+            # destination MAC addr
+            bcast_mac,
+            # source MAC addr
+            source_mac,
+            ETHERNET_PROTOCOL_TYPE_ARP,
+
+            # ## ARP
+            ARP_PROTOCOL_TYPE_ETHERNET_IP,
+            # operation type
+            ARPOP_REQUEST,
+            # sender MAC addr
+            source_mac,
+            # sender IP addr
+            sender_ip,
+            # target hardware addr
+            zero_mac,
+            # target IP addr
+            target_ip
+        ]
+
+        data = b''.join(arpframe)
+        for k, v in infod.items():
+            c = len(data)
             buf = bytearray(c.to_bytes(2, "big"))
+            sock = v[0]
+            if sock is None:
+                continue
+            r1 = sock.send(buf)
+            r2 = sock.send(data)
 
-            r1 = vpnsock.send(buf)
-            r2 = vpnsock.send(newd)
-            return True
+    def vpnroute(self, infod, dstip, data):
+        pair, tunnelip = self.findpair(dstip)
+        if pair is None:    #just pass the packet according its mac address
+            return None, data
 
+        try:
+            sock = infod[pair][0]
+        except:
+            self._logger.debug("can not find socket to route this packet, use default")
+            return None, data
 
+        self._logger.debug("try to route this packet through %s", pair)
 
-        return False
+        try:
+            macinfo = self._macinfo[pair]
+        except:
+            self._logger.debug("need request arp")
+            self.broadcast(infod, data[6:12], tunnelip)
+            return None, data
+
+        newd = macinfo[0] + data[6:]
+        return sock, newd
 
     def querymactable(self, macinfo, infod, mac):
         for k, v in macinfo.items():

@@ -470,6 +470,12 @@ class Http(HttpBase):
                 pass
             elif node["node"] == "client":
                 server = node["server"]
+            elif node["node"] == "vpn":
+                servers = node["server"]
+                for s in servers:
+                    ip = s["ip"]
+                    tip = s["tunnelip"]
+                    #self._logger.debug("ip, tip, %s, %s", ip, tip)
             else:
                 raise Exception("Unknown node type")
 
@@ -501,8 +507,12 @@ class Http(HttpBase):
         mgrdict = multiprocessing.Manager().dict()
         if node["node"] == "server":
             np = ServerProcess(node, self._logger, mgrdict)
-        else:
+        elif node["node"] == "client":
             np = ClientProcess(node, self._logger, mgrdict)
+        elif node["node"] == "vpn":
+            np = VpnProcess(node, self._logger, mgrdict)
+        else:
+            return False
         np.start()
         self._nodes[snt] = np
         return True
@@ -648,8 +658,13 @@ class Http(HttpBase):
         else:
             return None
 
+    def test(self, var):
+        print(self._configpath)
+
+        return var
+
 # Test every module
-if __name__ == "__main__3":
+if __name__ == "__main__":
     import logging
     logger = logging.getLogger("edgepoll")
     logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
@@ -744,7 +759,7 @@ if __name__ == "__main__1":
     logger.warning("Exit, Dataprocess status: %s", status)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__3":
     import logging
     import sys
     logger = logging.getLogger("edgepoll")
@@ -770,7 +785,7 @@ if __name__ == "__main__":
         elif sys.argv[1] == "vpn":
             node["node"] = "vpn"
             node["tunnelip"] = "10.139.27.101"
-            node["server"] = ["10.119.0.100", "10.119.0.103:5556"]
+            node["server"] = [{"ip":"10.119.0.100", "tunnelip": "10.139.27.1"}, {"ip":"10.119.0.103", "port": "5556", "tunnelip": "10.139.27.2", "allowips": "vpn.cfg"}]
             np = VpnProcess(node, logger, mgrdict)
         else:
             raise Exception("Unknown type")
