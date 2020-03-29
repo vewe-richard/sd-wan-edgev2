@@ -211,7 +211,7 @@ class VpnProcess(multiprocessing.Process):
                 continue
             if ip in l[3]:
                 return l[0], l[1]
-        return None
+        return None, None
 
     def broadcast(self, infod, source_mac, targetip):
         bcast_mac = pack('!6B', *(0xFF,) * 6)

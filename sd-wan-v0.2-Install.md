@@ -24,6 +24,7 @@ git pull
 
 sudo su
 pip3 install flask
+pip3 install python-pytuntap
 python3 install.py
 ```
 Note:  
@@ -101,6 +102,15 @@ The link is `http://xx.xx.xx.xx:8080/orchestration`, after create the tunnel, re
 
 
 
+V3 reinstall
+1. stop edgepoll
+
+2. stop all simpletun service and remove sdtap device
+
+3. install python-pytuntap
+4. cp stun.json
+5. clean log or tail -f log
+6. restart edgepoll
 
 
 
