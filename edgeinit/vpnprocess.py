@@ -15,6 +15,7 @@ import select
 from pathlib import Path
 
 from tuntap import TunTap
+from edgeinit.stunsocket import stunsocket
 
 class Kill2Exception(Exception):
     pass
@@ -105,9 +106,11 @@ class VpnProcess(multiprocessing.Process):
                             continue
                 if create:
                     self._logger.debug("create socket")
-                    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    sock = stunsocket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.setblocking(0)
                     sock.connect_ex(k)
+                    sock.init2()
+                    sock.setpair(k)
                     infod[k] = (sock, False, 0)
 
                 err = sock.getsockopt(socket.SOL_SOCKET, socket.SO_ERROR)
@@ -130,28 +133,30 @@ class VpnProcess(multiprocessing.Process):
 
                 reconnect = False
                 try:
-                    data = f.recv(2048)
-                    l = len(data)
-                    if l == 0:
-                        reconnect = True
-                        self._logger.debug("socket %d got data: 0", f.fileno())
-                    elif l < 3:
-                        continue
-                    else:
-                        leninpkt = data[0] * 256 + data[1] + 2
-                        if l == leninpkt:
-                            self.netdataprocess(dev, self.getk(infod, f), data[2:], l-2)
+                    if f.left() <= 0:
+                        data = bytearray(2)
+                        l = f.recv_into(data, 2, socket.MSG_WAITALL)
+                        if l < 2:
+                            reconnect = True
+                            self._logger.info("socket %d got interrupt, len should be 2 but %d", f.fileno(), l)
                         else:
-                            self.netdataprocess(dev, self.getk(infod, f), data, l)
-
+                            leninpkt = data[0] * 256 + data[1]
+                            self._logger.debug("need read leninpkt %d", leninpkt)
+                            if leninpkt < 14 or leninpkt > 1600:
+                                self._logger.info("socket %d got incorrect data, len %d", f.fileno(), leninpkt)
+                                reconnect = True
+                            else:
+                                f.beginread(leninpkt)
+                    else:
+                        if f.readleft():
+                            self.netdataprocess(dev, f.getpair(), f.data(), f.readsize())
                 except:
                     self._logger.debug(traceback.format_exc())  #TODO, we may recreate socket?
                     reconnect = True
 
                 if reconnect:
                     f.close()
-                    pair = self.getk(infod, f)
-                    infod[pair] = (f, True, time.time())
+                    infod[f.getpair()] = (f, True, time.time())
 
     def devdataprocess(self, infod, data, l):
         if l < 14:
@@ -293,7 +298,8 @@ class VpnProcess(multiprocessing.Process):
         try:
             return infod[k][0]
         except:
-            self._logger.info("!Can not find socket form mac %s", binascii.hexlify(mac))
+            self._logger.info("!Can not find socket form mac %s, %s", binascii.hexlify(mac), str(k))
+            self._logger.info(traceback.format_exc())
             return None
 
     #http://www.bitforestinfo.com/2017/01/how-to-write-simple-packet-sniffer.html
