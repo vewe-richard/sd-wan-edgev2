@@ -179,8 +179,11 @@ class VpnProcess(multiprocessing.Process):
                     sock = v[0]
                     if sock is None:
                         continue
-                    r1 = sock.send(buf)
-                    r2 = sock.send(data)
+                    try:
+                        r1 = sock.send(buf)
+                        r2 = sock.send(data)
+                    except:
+                        self._logger.warning("sock send broadcast error, maybe one tunnel is not connected %s", traceback.format_exc())
                 return
         elif eth_protocol == 0x0800: #  IP packet
             dstip = data[14+16:34]
@@ -262,8 +265,11 @@ class VpnProcess(multiprocessing.Process):
             sock = v[0]
             if sock is None:
                 continue
-            r1 = sock.send(buf)
-            r2 = sock.send(data)
+            try:
+                r1 = sock.send(buf)
+                r2 = sock.send(data)
+            except:
+                self._logger.info("broadcast but can not send, maybe tunnel is not connected")
 
     def vpnroute(self, infod, dstip, data):
         pair, tunnelip = self.findpair(dstip)
@@ -334,7 +340,25 @@ class VpnProcess(multiprocessing.Process):
                 else:
                     self._logger.debug("ARP op unprocessed %d", op)
         elif eth_protocol == 0x0800: #IP packet
-            pass
+            #storeobj = struct.unpack("!BBHHHBBH4s4s", data[14:34])
+            #_protocol = storeobj[6]
+            #_source_address = socket.inet_ntoa(storeobj[8])
+            #_destination_address = socket.inet_ntoa(storeobj[9])
+            #self._logger.debug("%s, %s, %s, %s", str(_protocol), _source_address, _destination_address, str(data[14+9]))
+            if data[14+9] == 17: #UDP
+                #storeobj = struct.unpack('!HHHH', data[34:42])
+                #source_port = storeobj[0]
+                #dest_port = storeobj[1]
+                #self._logger.debug("port: %d, %d, %d, %d", source_port, dest_port, data[34], data[35])
+                if data[34] == 0 and data[35] == 53:
+                    sip = bytes(data[26:30])
+                    p, tunnelip = self.findpair(sip)
+                    if not p is None:  #it means the reponse from dns server, the dns server is in vpn ip list
+                        self.dnsprocess(data[42:], p)
+                    else:
+                        #self._logger.debug("default dns routine")
+                        #self.dnsprocess(data[42:], p)
+                        pass
         elif eth_protocol == 0x86dd: #IPV6
             #self._logger.debug("netdataprocess IPV6, discard it")
             return
@@ -346,6 +370,62 @@ class VpnProcess(multiprocessing.Process):
         if r != l:
             self._logger.warning("Warning: write to tap (%d) is smaller than request (%d)", r, l)
         return
+
+    # https://www.zytrax.com/books/dns/ch15/#answer
+    def dnsprocess(self, data, pair):
+        HEADER = '!HBBHHHH'
+        HEADER_SIZE = struct.calcsize(HEADER)
+        storeobj = struct.unpack(HEADER, data[:HEADER_SIZE])
+        #self._logger.debug("dns data %s", binascii.hexlify(data[:20]))
+        #self._logger.debug("%x, %x ,%x, %d, %d, %d, %d", storeobj[0], storeobj[1], storeobj[2], storeobj[3], storeobj[4], storeobj[5], storeobj[6])
+        if (storeobj[1] & 0xf8) != 0x80: #dns response message for standard query
+            self._logger.info("not dns response message for standard query")
+            return
+        if (storeobj[2] & 0x0f) != 0x00: #error exist
+            self._logger.info("dns error response")
+            return
+        if storeobj[4] != 0 or storeobj[5] != 0:
+            self._logger.warning("Warning, dns parsing, name server field and additional is not processed")
+
+        self._logger.debug("questions %d, answers %d", storeobj[3], storeobj[4])
+        data = data[HEADER_SIZE:]
+        off = 0
+        for cnt in range(0, storeobj[3]):
+            off += data.find(b'\0') #skip name
+            #self._logger.debug(str(data[1:off]))
+            #self._logger.debug(binascii.hexlify(data[off:off+5]))
+            off += 5  #skip \0, QTYPE, QCLASS
+        data = data[off:]
+        off = 0
+        for cnt in range(0, storeobj[4]):
+            if (data[0] & 0xc0) == 0xc0: #name label
+                off += 2
+            else:
+                off += data.find(b'\0') + 1 #skip name
+            self._logger.debug(binascii.hexlify(data[off:off + 10]))
+            typ = data[off+1]  #TYPE
+            rdlen = data[off + 8] * 256 + data[off + 9]
+            if typ == 1: # A record
+                #self._logger.debug(binascii.hexlify(data[off+10:off+10+rdlen]))
+                for i in range(off+10, off+10+rdlen, 4):
+                    #self._logger.debug("%s, %s", type(data[i:i+4]), binascii.hexlify(data[i:i+4]))
+                    self.appendtovpn(pair, data[i:i+4])
+            off += (10 + rdlen)
+
+    def appendtovpn(self, pair, ip):
+        for l in self._vpncfglist:  #TODO, we should comparing pair with ...
+            if not l[3] is None:
+                break
+        else:
+            return
+
+        if not ip in l[3]:
+            l[3].append(bytes(ip))
+
+        self._logger.debug("new vpn ip list %s", str(l[3]))
+        pass
+
+
 
     def eth_header(self, data):
         storeobj = data[0:14]
