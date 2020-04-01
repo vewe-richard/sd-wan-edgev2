@@ -547,10 +547,10 @@ class Http(HttpBase):
     def query(self, msg):
         try:
             snt = self.subnet(msg["tunnelip"])
-        except:  #return ip list of all nodes
-            try:
+        except:
+            try: # check if port is specified to replace tunnelip to adapt to old version
                 snt = self.subnet(self.findip2(msg["port"], msg["node"]))
-            except:
+            except: #return ip list of all nodes
                 self._logger.info(traceback.format_exc())
                 ipl = []
                 for k, v in self._nodes.items():
@@ -563,7 +563,7 @@ class Http(HttpBase):
             status["status"] = np.status()
             return str(status)
         except:
-            return "NOK"
+            return "NOK, can not locate node " + snt + " or get status failed from this node"
 
     def addnode(self, msg):
         if not self.validnode(msg):
@@ -667,7 +667,7 @@ class Http(HttpBase):
 if __name__ == "__main__":
     import logging
     logger = logging.getLogger("edgepoll")
-    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     import sys
     try:
         cfgfile = sys.argv[2]
@@ -702,7 +702,7 @@ if __name__ == "__main__":
             resp = http.post(opts)
             logger.info("resp: %s", resp)
         elif cmd == "status":
-            opts = {"entry": "http", "module": "stun", "cmd": "query", "tunnelip": "10.139.47.1"}
+            opts = {"entry": "http", "module": "stun", "cmd": "query", "tunnelip": "10.139.27.1"}
             resp = http.post(opts)
             logger.info("resp: %s", resp)
             pass
