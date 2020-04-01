@@ -561,7 +561,7 @@ class Http(HttpBase):
             np = self._nodes[snt]
             status = np.dpstatus()
             status["status"] = np.status()
-            return str(status)
+            return status
         except:
             return "NOK, can not locate node " + snt + " or get status failed from this node"
 
@@ -663,6 +663,30 @@ class Http(HttpBase):
 
         return var
 
+def parsestatus(data, logger):
+    logger.info("Status: %s", data["status"])
+    for k, v in data.items():
+        if type(k) is tuple:
+            logger.info("")
+            logger.info(str(k))
+            logger.info("status: %s", v["status"])
+            try:
+                delta = int(time.time() - v["connect"])
+                logger.info("connected at: %s seconds ago", str(delta))
+                delta = int(time.time() - v["recv"])
+                logger.info("latest received: %s seconds ago", str(delta))
+            except:
+                pass
+
+            try:
+                delta = int(time.time() - v["lost"])
+                logger.info("lost at: %s seconds ago", str(delta))
+                logger.info("reason: %s", v["reason"])
+                logger.info("reconnect times: %s", str(v["reconnect"]))
+                logger.info("reconnect reason: %s", str(v["rereason"]))
+            except:
+                pass
+
 # Test every module
 if __name__ == "__main__":
     import logging
@@ -704,7 +728,11 @@ if __name__ == "__main__":
         elif cmd == "status":
             opts = {"entry": "http", "module": "stun", "cmd": "query", "tunnelip": "10.139.27.1"}
             resp = http.post(opts)
-            logger.info("resp: %s", resp)
+            #logger.info("resp: %s", resp)
+            try:
+                parsestatus(resp, logger)
+            except:
+                logger.info(traceback.format_exc())
             pass
         elif cmd == "list":
             opts = {"entry": "http", "module": "stun", "cmd": "query"}
