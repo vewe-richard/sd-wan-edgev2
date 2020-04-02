@@ -90,7 +90,6 @@ class VpnProcess(multiprocessing.Process):
             status["bytes"] = 0
             status["status"] = "INIT"
             self._mgrdict[pair] = status
-        self._logger.debug(str(self._vpncfglist))
         self._logger.info("run2 servers: %s", str(infod))
         dev = TunTap(nic_type="Tap", nic_name=self.tuntapname())
         dev.config(self._ip, "255.255.255.0")
@@ -112,10 +111,9 @@ class VpnProcess(multiprocessing.Process):
                         else:
                             continue
                 if create:
-                    self._logger.debug("create socket")
                     sock = stunsocket(socket.AF_INET, socket.SOCK_STREAM)
                     sock.setblocking(0)
-                    sock.connect_ex(k)
+                    err = sock.connect_ex(k)
                     sock.init2()
                     sock.setpair(k)
                     infod[k] = (sock, False, 0)
@@ -124,7 +122,8 @@ class VpnProcess(multiprocessing.Process):
                 if err == 0:
                     rda.append(sock)
                     #if the tunnel is not in connect, we need get notify from write list on connected
-                    if not self._mgrdict["status"] == "CONNECT":
+                    status = self._mgrdict[k]
+                    if not status["status"] == "CONNECT":
                         wra.append(sock)
                 else:
                     wra.append(sock)
@@ -133,14 +132,6 @@ class VpnProcess(multiprocessing.Process):
 
             #self._logger.debug("select read %s;  write %s", self.listbrief(rda), self.listbrief(wra))
             rfd, wfd, xfd = select.select(rda, wra, [], 3)
-            for f in wfd:
-                status = self._mgrdict[f.getpair()]
-                if not status["status"] == "CONNECT":
-                    status["status"] = "CONNECT"
-                    status["connect"] = time.time()
-                    status["bytes"] = 0
-                    self._mgrdict[f.getpair()] = status
-
             for f in rfd:
                 if f == dev.handle:
                     data = dev.read(2048)
@@ -192,6 +183,23 @@ class VpnProcess(multiprocessing.Process):
                     status["reconnect"] += 1
                     status["rereason"] = reason
                     self._mgrdict[f.getpair()] = status
+
+            for f in wfd:
+                pair = f.getpair()
+                status = self._mgrdict[pair]
+                reconnect = infod[pair][1]
+                #self._logger.info("%s: reconnect %s, status %s", str(pair), str(reconnect), status["status"])
+                if not reconnect and not status["status"] == "CONNECT":
+                    try:
+                        f.send(bytearray(b'\0\0'))
+                        status["status"] = "CONNECT"
+                        status["connect"] = time.time()
+                        status["bytes"] = 0
+                        self._mgrdict[f.getpair()] = status
+                    except:
+                        self._logger.info("patch, fault connect event")
+                        pass
+
 
     def devdataprocess(self, infod, data, l):
         if l < 14:
