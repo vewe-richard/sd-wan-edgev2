@@ -70,6 +70,7 @@ class VpnProcess(multiprocessing.Process):
         self._macinfo = dict()
         infod = dict()
         self._vpncfglist = []
+        gateway = None
         for s in self._node["server"]:
             try:
                 port = int(s["port"])
@@ -80,8 +81,11 @@ class VpnProcess(multiprocessing.Process):
 
             try:
                 vpntunnelip = s["tunnelip"]
+                if vpntunnelip[-2] == "." and vpntunnelip[-1] == "1":
+                    gateway = vpntunnelip
             except:
                 vpntunnelip = None
+
             vpncfgpath, vpncfgobj = self.loadvpncfg(s)
 
             self._vpncfglist.append((pair, vpntunnelip, vpncfgpath, vpncfgobj, 0 if vpncfgobj is None else len(vpncfgobj)))
@@ -96,6 +100,11 @@ class VpnProcess(multiprocessing.Process):
         self._dev = dev
 
         self._mgrdict["status"] = "In Loop"
+        try:
+            if not gateway is None:
+                self.router_iptable_setup(infod, gateway, self.tuntapname())
+        except:
+            self._logger.info("Warning %s", traceback.format_exc())
         while True:
             rda = []
             wra = []
@@ -514,6 +523,7 @@ class VpnProcess(multiprocessing.Process):
             if not self._dev is None:
                 self._dev.close()
                 pass
+            self.router_iptable_destroy(self.tuntapname())
             self.shell(["ip", "tuntap", "del", "mode", "tap", "name", self.tuntapname()])
         self._logger.warning("VpnProcess Exit")
 
@@ -544,9 +554,61 @@ class VpnProcess(multiprocessing.Process):
         except:
             self._logger.warning(traceback.format_exc())
             pass
+        dps["tapname"] = self.tuntapname()
         return dps
 
     def tuntapname(self):
         prefix = "v." + self._ip
         return prefix
 
+    #tapname: self.tuntapname()
+    #
+    def router_iptable_setup(self, infod, gateway, tapname):
+        d = dict()
+        for k, v in infod.items():
+            d[k[0]] = True        #should this ip use default router
+        sp = subprocess.run(["ip", "route", "list"], stdout=subprocess.PIPE)
+        for l in sp.stdout.decode().splitlines():
+            items = l.split()
+            if "default via" in l:
+                default = items[2]
+                continue
+            a = items[0].split('.')
+            if len(a) != 4:
+                continue
+            subnet = ".".join(a[0:3])
+            for ip in d.keys():
+                if subnet in ip:
+                    d[ip] = False
+        for ip, v in d.items():
+            if not v:
+                continue
+            self.shell(["ip", "route", "add", ip+"/32", "via", default])
+        self.shell(["ip", "route", "delete", "default"])
+        self.shell(["ip", "route", "add", "default", "via", gateway])
+        ''' TODO, as dynamic change iptable always block, we may find the way in iptable config file
+        sp = subprocess.run(["iptables", "-t", "nat", "-v", "-L", "POSTROUTING"], stdout=subprocess.PIPE)
+        for l in sp.stdout.decode().splitlines():
+            items = l.split()
+            if len(items) < 7:
+                continue
+            if tapname in items[6]:
+                break
+        else:
+            self.shell(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", tapname, "-j", "MASQUERADE"])
+        '''
+        pass
+
+    def router_iptable_destroy(self, tapname):
+        ''' TODO, as dynamic change iptable always block, we may find the way in iptable config file
+        sp = subprocess.run(["iptables", "-t", "nat", "-v", "-L", "POSTROUTING", "--line-number"], stdout=subprocess.PIPE)
+        for l in sp.stdout.decode().splitlines():
+            items = l.split()
+            if len(items) < 8:
+                continue
+            if tapname in items[7]:
+                self.shell(["iptables", "-t", "nat", "-D", "POSTROUTING", items[0]])
+                pass
+            pass
+        '''
+        self.shell(["netplan", "apply"])

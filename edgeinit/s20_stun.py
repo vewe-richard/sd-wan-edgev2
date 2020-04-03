@@ -687,6 +687,55 @@ def parsestatus(data, logger):
             except:
                 pass
 
+def vpn_router_table_status(tapname, pairs):
+    #default router is the tuntapname()
+    #server ip has its router
+    routable = dict()
+    routable["default"] = False
+    for i in pairs:
+        routable[i[0]] = False
+
+    sp = subprocess.run(["ip", "route", "list"], stdout=subprocess.PIPE)
+    for l in sp.stdout.decode().splitlines():
+        if "default via" in l:
+            if tapname in l:
+                routable["default"] = True
+        else:
+            ai = l.split()
+            items = ai[0].split(".")
+            if len(items) != 4:
+                continue
+            for p in pairs:
+                bi = p[0].split(".")
+                if len(bi) != 4:
+                    continue
+                if items[0] == bi[0] and items[1] == bi[1] and items[2] == bi[2]:
+                    routable[p[0]] = True
+    for k, v in routable.items():
+        if not v:
+            return "Error: " + k + " has not route"
+    '''TODO, as dynamic change iptable always block, we may find the way in iptable config file
+    #iptable masquerde is exist
+    sp = subprocess.run(["iptables", "-t", "nat", "-v", "-L", "POSTROUTING"], stdout=subprocess.PIPE)
+    for l in sp.stdout.decode().splitlines():
+        items = l.split()
+        if len(items) < 7:
+            continue
+        if tapname in items[6]:
+            break
+    else:
+        return "Error: iptable is not set for NAT"
+    '''
+    #/etc/resolv.conf is configured correctly
+    with open("/etc/resolv.conf", "r") as f:
+        if not "127.0.0.1" in f.read():
+            return "Error: should specify 127.0.0.1(dnsmasq) as default dns server. Note config NetworkManager dns=none"
+    #dnsmasq is working
+    sp = subprocess.run(["systemctl", "status", "dnsmasq"], stdout=subprocess.DEVNULL)
+    if sp.returncode:
+        return "dnsmasq is not running"
+    return "OK, router and dns checking OK, but iptables(to Check by yourself)"
+
 # Test every module
 if __name__ == "__main__":
     import logging
@@ -733,6 +782,11 @@ if __name__ == "__main__":
                 parsestatus(resp, logger)
             except:
                 logger.info(traceback.format_exc())
+            pairs = []
+            for k, v in resp.items():
+                if k is tuple:
+                    pairs.append(k)
+            logger.info(vpn_router_table_status(resp["tapname"], pairs))
             pass
         elif cmd == "list":
             opts = {"entry": "http", "module": "stun", "cmd": "query"}
