@@ -218,6 +218,18 @@ class VpnProcess(multiprocessing.Process):
         #self._logger.debug(str(self.eth_header(data[0:14])))
         storeobj = struct.unpack("!6s6sH", data[0:14])
 
+        if storeobj[0].find(b'\x01\x00\x5e') == 0: #multicast, it maybe dropped for simplfying
+            dstip = data[14 + 16:34]
+            if dstip.find(b'\xe0\x00\x00\xfb') == 0: #224.0.0.251 MDNS
+                pass
+            elif dstip.find(b'\xef\xff\xff\xfa') == 0: #239.255.255.250 upnp
+                pass
+            elif dstip.find(b'\xe0\x00\x00\x16') == 0: #group multicast
+                pass
+            else:
+                self._logger.warning("Discard multicast packet from tap, unknown ip %s", str(dstip))
+            return
+
         eth_protocol = storeobj[2]
         #self._logger.debug("protocol, %s", hex(eth_protocol))
         sock = None
@@ -235,7 +247,7 @@ class VpnProcess(multiprocessing.Process):
                         r1 = sock.send(buf)
                         r2 = sock.send(data)
                     except:
-                        self._logger.warning("sock send broadcast error, maybe one tunnel is not connected %s", traceback.format_exc())
+                        self._logger.warning("sock send broadcast error, maybe tunnel[%s] is not connected %s", str(k), traceback.format_exc())
                 return
         elif eth_protocol == 0x0800: #  IP packet
             dstip = data[14+16:34]
@@ -438,7 +450,7 @@ class VpnProcess(multiprocessing.Process):
         if (storeobj[2] & 0x0f) != 0x00: #error exist
             self._logger.info("dns error response")
             return
-        if storeobj[4] != 0 or storeobj[5] != 0:
+        if storeobj[5] != 0 or storeobj[6] != 0:
             self._logger.warning("Warning, dns parsing, name server field and additional is not processed")
 
         self._logger.debug("questions %d, answers %d", storeobj[3], storeobj[4])

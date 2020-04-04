@@ -787,6 +787,7 @@ if __name__ == "__main__":
                 if k is tuple:
                     pairs.append(k)
             logger.info(vpn_router_table_status(resp["tapname"], pairs))
+            logger.info("iptables -t nat -A POSTROUTING -o %s -j MASQUERADE", resp["tapname"])
             pass
         elif cmd == "list":
             opts = {"entry": "http", "module": "stun", "cmd": "query"}
