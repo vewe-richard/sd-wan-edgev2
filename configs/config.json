@@ -1,0 +1,14 @@
+{
+  "sn": "00090002",
+  "type": "fatedge",
+  "name": "test-fatedge",
+  "spec": "baicells-sd-wan-fatedge.hw.v02",
+  "sw": "fatedge.v01",
+  "sms": "127.0.0.1",
+  "smsport": 8080,
+  "publicip": "",
+  "inputport": 11012,
+  "timeout": 6
+}
+
+

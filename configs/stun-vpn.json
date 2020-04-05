@@ -1,0 +1,3 @@
+[{"node": "vpn", "port": "5555", "tunnelip": "10.139.27.101", "tunortap": "tap", "tunneltype": "ipsec",
+  "server":[{"ip":"172.16.2.117", "tunnelip": "10.139.27.1"}, {"ip":"47.75.45.219", "port": "23", "tunnelip": "10.139.27.2", "allowips": "vpn.cfg"}] }
+]

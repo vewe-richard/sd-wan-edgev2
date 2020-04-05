@@ -28,7 +28,7 @@ class stunsocket(socket.socket):
             cnt = self.recv_into(self._view, self._left)
         except BlockingIOError:
             #self._logger.debug("blocking io error, to read %d, left %d", self._toread, self._left)
-            print("blocking io error,", self._toread, self._left)
+            self._logger.info("blocking io error,", self._toread, self._left)
             return False
         self._left -= cnt
         self._view = self._view[cnt:]

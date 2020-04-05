@@ -132,7 +132,9 @@ class VpnProcess(multiprocessing.Process):
                     rda.append(sock)
                     #if the tunnel is not in connect, we need get notify from write list on connected
                     status = self._mgrdict[k]
-                    if not status["status"] == "CONNECT":
+                    if status is None or status["status"] == "CONNECT":
+                        pass
+                    else:
                         wra.append(sock)
                 else:
                     wra.append(sock)
@@ -158,12 +160,12 @@ class VpnProcess(multiprocessing.Process):
                         if l < 2:
                             reconnect = True
                             reason = "socket receive zero data"
-                            self._logger.info("socket %d got interrupt, len should be 2 but %d", f.fileno(), l)
+                            self._logger.info("socket %s got interrupt, len should be 2 but %d", str(f.getpair()), l)
                         else:
                             leninpkt = data[0] * 256 + data[1]
                             self._logger.debug("need read leninpkt %d", leninpkt)
                             if leninpkt < 14 or leninpkt > 1600:
-                                self._logger.info("socket %d got incorrect data, len %d", f.fileno(), leninpkt)
+                                self._logger.info("socket %s got incorrect data, len %d", str(f.getpair()), leninpkt)
                                 reconnect = True
                                 reason = "socket receive incorrect packet length " + str(leninpkt)
                             else:
@@ -176,7 +178,7 @@ class VpnProcess(multiprocessing.Process):
                         if f.readleft():
                             self.netdataprocess(dev, f.getpair(), f.data(), f.readsize())
                 except Exception as e:
-                    self._logger.info(traceback.format_exc())
+                    self._logger.info("%s %s", f.getpair(), traceback.format_exc())
                     reconnect = True
                     reason = str(e)
 
@@ -206,13 +208,13 @@ class VpnProcess(multiprocessing.Process):
                         status["bytes"] = 0
                         self._mgrdict[f.getpair()] = status
                     except:
-                        self._logger.info("patch, fault connect event")
+                        self._logger.info("patch, fault connect event, %s, %s", str(pair), traceback.format_exc())
                         pass
 
 
     def devdataprocess(self, infod, data, l):
         if l < 14:
-            self._logger.debug("incomplete packet, %d", l)
+            self._logger.warning("incomplete packet, %d", l)
             raise Exception("TODO") #to uncomment
             return
         #self._logger.debug(str(self.eth_header(data[0:14])))
@@ -247,7 +249,7 @@ class VpnProcess(multiprocessing.Process):
                         r1 = sock.send(buf)
                         r2 = sock.send(data)
                     except:
-                        self._logger.warning("sock send broadcast error, maybe tunnel[%s] is not connected %s", str(k), traceback.format_exc())
+                        self._logger.warning("sock send broadcast error, maybe tunnel[%s] is not connected, should we reconnect? %s", str(k), traceback.format_exc())
                 return
         elif eth_protocol == 0x0800: #  IP packet
             dstip = data[14+16:34]
@@ -256,7 +258,7 @@ class VpnProcess(multiprocessing.Process):
             #self._logger.debug("netdataprocess IPV6, discard it")
             return
         else:
-            self._logger.debug("unprocessed protocol %s", hex(eth_protocol))
+            self._logger.warning("unprocessed protocol %s", hex(eth_protocol))
             return
 
         #self._logger.debug("send back packet, dst mac: %s", binascii.hexlify(storeobj[0]))
@@ -266,7 +268,7 @@ class VpnProcess(multiprocessing.Process):
             sock = self.querymactable(self._macinfo, infod, storeobj[0])
 
         if sock is None:
-            self._logger.debug("socket is None, can not reply packet")
+            self._logger.warning("socket is None, can not reply packet")
             return
 
         c = len(data)
@@ -379,7 +381,7 @@ class VpnProcess(multiprocessing.Process):
     def netdataprocess(self, dev, pair, data, l):
         #self._logger.debug("%s data in, len %d: %s", str(pair), l, str(data[0:14].hex()))
         if l < 14:
-            self._logger.debug("incomplete packet, %d", l)
+            self._logger.warning("incomplete packet, %d", l)
             raise Exception("TODO") #to uncomment
             return
 
@@ -394,7 +396,7 @@ class VpnProcess(multiprocessing.Process):
             if hrd == 1:  #ethernet
                 pro = storeobj[1]
                 if pro != 2048:
-                    self._logger.debug("unknown ARP Pro %d", pro)
+                    self._logger.warning("unknown ARP Pro %d", pro)
                     return
                 op = storeobj[4]
                 if op == 1 or op == 2: #Arp Request and Arp Reply
@@ -404,7 +406,7 @@ class VpnProcess(multiprocessing.Process):
                     #self._logger.debug(str(storeobj))
                     self._logger.debug("Mac record for %s, mac: %s, ip: %s", pair, binascii.hexlify(s[0]), binascii.hexlify(s[1]))
                 else:
-                    self._logger.debug("ARP op unprocessed %d", op)
+                    self._logger.warning("ARP op unprocessed %d", op)
         elif eth_protocol == 0x0800: #IP packet
             #storeobj = struct.unpack("!BBHHHBBH4s4s", data[14:34])
             #_protocol = storeobj[6]
@@ -429,7 +431,7 @@ class VpnProcess(multiprocessing.Process):
             #self._logger.debug("netdataprocess IPV6, discard it")
             return
         else:
-            self._logger.debug("unprocessed protocol %s", hex(eth_protocol))
+            self._logger.warning("unprocessed protocol %s", hex(eth_protocol))
             return
 
         r = dev.write(data)
@@ -573,6 +575,18 @@ class VpnProcess(multiprocessing.Process):
         prefix = "v." + self._ip
         return prefix
 
+    def routinefordns(self, default):
+        with open("/etc/dnsmasq.conf", "r") as f:
+            for l in f.readlines():
+                if l.find("server=") == 0:
+                    a = l.split("=")
+                    items = a[1].split(".")
+                    if not len(items) == 4:
+                        continue
+                    self.shell(["ip", "route", "add", a[1].strip(), "via", default])
+                    break
+        pass
+
     #tapname: self.tuntapname()
     #
     def router_iptable_setup(self, infod, gateway, tapname):
@@ -598,6 +612,10 @@ class VpnProcess(multiprocessing.Process):
             self.shell(["ip", "route", "add", ip+"/32", "via", default])
         self.shell(["ip", "route", "delete", "default"])
         self.shell(["ip", "route", "add", "default", "via", gateway])
+        try:
+            self.routinefordns(default)
+        except:
+            self._logger.info("Warning can not set route for dns, %s", traceback.format_exc())
         ''' TODO, as dynamic change iptable always block, we may find the way in iptable config file
         sp = subprocess.run(["iptables", "-t", "nat", "-v", "-L", "POSTROUTING"], stdout=subprocess.PIPE)
         for l in sp.stdout.decode().splitlines():

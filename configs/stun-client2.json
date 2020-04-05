@@ -1,0 +1,1 @@
+[{"node": "client", "server":"10.129.101.98", "port": "55556", "tunnelip": "10.139.47.4", "tunortap": "tap", "tunneltype": "ipsec"}]
