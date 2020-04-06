@@ -412,7 +412,7 @@ class ServerProcess(NodeProcess):
             #debug.
             q = multiprocessing.active_children()
             for i in q:
-                logger.info("in sever: %s %s", type(i), str(i))
+                self._logger.info("in sever: %s %s", type(i), str(i))
 
     def dpstatus(self):
         dps = dict()
@@ -752,7 +752,7 @@ def vpn_router_table_status(tapname, pairs):
 if __name__ == "__main__":
     import logging
     logger = logging.getLogger("edgepoll")
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     import sys
     try:
         cfgfile = sys.argv[2]
