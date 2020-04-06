@@ -391,10 +391,15 @@ class ServerProcess(NodeProcess):
             self._logger.info("NodeProcess Accept: %s, %s", str(clientsocket), str(addr))
             try:
                 pre = self._connections[addr[0]]
-                pre.terminate()
-                pre.join(timeout=0.1)
-                devname = pre.devname()
-                self._reconnecttimes[addr[0]] += 1
+                try:
+                    pre.terminate()
+                    pre.join(timeout=0.1)
+                    devname = pre.devname()
+                    self._reconnecttimes[addr[0]] += 1
+                    del self._mgrdict[addr[0]]
+                except:
+                    self._logger.warning(traceback.format_exc())
+                    pass
             except: #create it self
                 devname = self.tuntapname(addr[0], 0, self._ip)
                 self._reconnecttimes[addr[0]] = 0
@@ -404,6 +409,10 @@ class ServerProcess(NodeProcess):
             self._connections[addr[0]] = dp
             self._mgrdict[addr[0]] = mgrdict
             dp.start()
+            #debug.
+            q = multiprocessing.active_children()
+            for i in q:
+                logger.info("in sever: %s %s", type(i), str(i))
 
     def dpstatus(self):
         dps = dict()
@@ -664,6 +673,9 @@ class Http(HttpBase):
         return var
 
 def parsestatus(data, logger):
+    if type(data) is str:
+        logger.info("Status error: %s", data)
+        return
     logger.info("Status: %s", data["status"])
     for k, v in data.items():
         if type(k) is tuple:
@@ -777,11 +789,14 @@ if __name__ == "__main__":
         elif cmd == "status":
             opts = {"entry": "http", "module": "stun", "cmd": "query", "tunnelip": "10.139.27.1"}
             resp = http.post(opts)
-            #logger.info("resp: %s", resp)
+            logger.info("resp: %s", resp)
             try:
                 parsestatus(resp, logger)
             except:
                 logger.info(traceback.format_exc())
+            if type(resp) is str:
+                logger.info("Can not inspect status")
+                continue
             pairs = []
             for k, v in resp.items():
                 if k is tuple:
@@ -794,6 +809,10 @@ if __name__ == "__main__":
             resp = http.post(opts)
             logger.info("resp: %s", resp)
             pass
+        elif cmd == "test":
+            q = multiprocessing.active_children()
+            for i in q:
+                logger.info("%s %s", type(i), str(i))
 
     http.join()
     logger.warning("Exit Http")
