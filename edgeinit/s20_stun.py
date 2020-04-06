@@ -392,6 +392,8 @@ class ServerProcess(NodeProcess):
             try:
                 pre = self._connections[addr[0]]
                 try:
+                    pre.kill2()
+                    pre.join(timeout=0.1)
                     pre.terminate()
                     pre.join(timeout=0.1)
                     devname = pre.devname()
@@ -752,7 +754,7 @@ def vpn_router_table_status(tapname, pairs):
 if __name__ == "__main__":
     import logging
     logger = logging.getLogger("edgepoll")
-    logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
+    logging.basicConfig(level=20, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     import sys
     try:
         cfgfile = sys.argv[2]
@@ -801,8 +803,11 @@ if __name__ == "__main__":
             for k, v in resp.items():
                 if k is tuple:
                     pairs.append(k)
-            logger.info(vpn_router_table_status(resp["tapname"], pairs))
-            logger.info("iptables -t nat -A POSTROUTING -o %s -j MASQUERADE", resp["tapname"])
+            try:
+                logger.info(vpn_router_table_status(resp["tapname"], pairs))
+                logger.info("iptables -t nat -A POSTROUTING -o %s -j MASQUERADE", resp["tapname"])
+            except:
+                pass
             pass
         elif cmd == "list":
             opts = {"entry": "http", "module": "stun", "cmd": "query"}

@@ -616,6 +616,7 @@ class VpnProcess(multiprocessing.Process):
             self.routinefordns(default)
         except:
             self._logger.info("Warning can not set route for dns, %s", traceback.format_exc())
+        self.shell(["systemctl", "restart", "dnsmasq"])  #restart dnsmasq to clear dns cache
         ''' TODO, as dynamic change iptable always block, we may find the way in iptable config file
         sp = subprocess.run(["iptables", "-t", "nat", "-v", "-L", "POSTROUTING"], stdout=subprocess.PIPE)
         for l in sp.stdout.decode().splitlines():
