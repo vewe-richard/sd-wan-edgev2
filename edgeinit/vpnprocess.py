@@ -66,20 +66,19 @@ class VpnProcess(multiprocessing.Process):
             vpncfgobj.append(socket.inet_aton(i))
         return vpncfgpath, vpncfgobj
 
-    def bindport(self, sock, ip, port):
-        # try to use a specific source port get from the serverip and port
-        # then in server part, can judge whether should it accept connection from its source port
-        items = ip.split(".")
-        start = 10000 + 100*(int(items[3])%100) + port%100
+    def bindport(self, sock, port):
+        # try to use a specific source port according to the server port
+        # then in server part, can judge whether it should accept connection from a source port
+        start = 10000 + port%1000
         for p in range(start, start + 10):
             try:
                 sock.bind(("0.0.0.0", p))
-                self._logger.info("use source port %d for connection to %s:%d", p, ip, port)
+                self._logger.info("use source port %d for connection to port %d", p, port)
                 break
             except:
                 continue
         else:
-            self._logger.warning("Can not find source port for connection to %s:%d", ip, port)
+            self._logger.warning("Can not bind source port for connection to port %d", port)
 
     def run2(self):
         self._macinfo = dict()
@@ -136,7 +135,7 @@ class VpnProcess(multiprocessing.Process):
                             continue
                 if create:
                     sock = stunsocket(socket.AF_INET, socket.SOCK_STREAM)
-                    self.bindport(sock, k[0], int(k[1]))
+                    self.bindport(sock, int(k[1]))
                     sock.setblocking(0)
                     err = sock.connect_ex(k)
                     sock.init2()

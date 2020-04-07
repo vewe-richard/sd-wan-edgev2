@@ -281,26 +281,25 @@ class ClientProcess(NodeProcess):
 
         self._logger.warning("ClientProcess Exit")
 
-    def bindport(self, sock, ip, port):
-        # try to use a specific source port get from the serverip and port
-        # then in server part, can judge whether should it accept connection from its source port
-        items = ip.split(".")
-        start = 10000 + 100*(int(items[3])%100) + port%100
+    def bindport(self, sock, port):
+        # try to use a specific source port according to the server port
+        # then in server part, can judge whether it should accept connection from a source port
+        start = 10000 + port%1000
         for p in range(start, start + 10):
             try:
                 sock.bind(("0.0.0.0", p))
-                self._logger.info("use source port %d for connection to %s:%d", p, ip, port)
+                self._logger.info("use source port %d for connection to port %d", p, port)
                 break
             except:
                 continue
         else:
-            self._logger.warning("Can not find source port for connection to %s:%d", ip, port)
+            self._logger.warning("Can not bind source port for connection to port %d", port)
 
     def run2(self):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket = s
-            self.bindport(s, self._server, self._port)
+            self.bindport(s, self._port)
             s.connect((self._server, self._port))
         except Exception as e:
             self._logger.warning("ClientProcess %s", traceback.format_exc())
@@ -399,9 +398,9 @@ class ServerProcess(NodeProcess):
             self._logger.info("ServerProcess(%s) Exit", self._ip)
             pass
 
-    def invalid_source_port(self, serverip, serverport, sourceport):
-        items = serverip.split(".")
-        start = 10000 + 100*(int(items[3])%100) + serverport%100
+    #
+    def invalid_source_port(self, serverport, sourceport):
+        start = 10000 + serverport%1000
         if sourceport < start or sourceport >= (start + 10):
             self._logger.warning("the source port range should be %d ~ %d", start, start + 10)
             return True
@@ -411,8 +410,9 @@ class ServerProcess(NodeProcess):
     def loop(self, serversocket):
         while True:
             clientsocket, addr = serversocket.accept()
-            if self.invalid_source_port(self._ip, self._port, addr[1]):
-                self._logger.warning("Mismatch connection from %s, server is %s:%s", str(addr), self._ip, self._port)
+            if self.invalid_source_port(self._port, addr[1]):
+                self._logger.warning("Mismatch connection from %s, server port is %s", str(addr), self._port)
+                clientsocket.close()
                 continue
             self._logger.info("NodeProcess Accept: %s, %s", str(clientsocket), str(addr))
             try:
