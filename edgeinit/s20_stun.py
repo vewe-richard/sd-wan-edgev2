@@ -402,7 +402,8 @@ class ServerProcess(NodeProcess):
     def invalid_source_port(self, serverip, serverport, sourceport):
         items = serverip.split(".")
         start = 10000 + 100*(int(items[3])%100) + serverport%100
-        if sourceport < start and sourceport >= (start + 10):
+        if sourceport < start or sourceport >= (start + 10):
+            self._logger.warning("the source port range should be %d ~ %d", start, start + 10)
             return True
         return False
 
@@ -782,8 +783,8 @@ if __name__ == "__main__":
     logging.basicConfig(level=20, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     import sys
     try:
-        cfgfile = sys.argv[2]
-        logger.warning("cfgfile %s", sys.argv[2])
+        cfgfile = sys.argv[1]
+        logger.warning("cfgfile %s", sys.argv[1])
     except:
         cfgfile = None
     http = Http(logger, cfgfile)
