@@ -335,6 +335,7 @@ class ServerProcess(NodeProcess):
         super().__init__(node, logger, mgrdict, **kwargs)
         self._connections = dict()
         self._reconnecttimes = multiprocessing.Manager().dict()
+        self._clientsockets = dict()
         if self._node["tunortap"] == "tap":  #need create bridge
             br = self.bridgename()
             self.releasebridge(br)
@@ -363,6 +364,7 @@ class ServerProcess(NodeProcess):
         # create a socket object
         serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
+            serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             serversocket.bind(("0.0.0.0", self._port))
             serversocket.listen(5)
         except Exception as e:
@@ -390,6 +392,9 @@ class ServerProcess(NodeProcess):
         finally:
             for key, dp in self._connections.items():
                 dp.join(timeout=0.1)
+            for key, sock in self._clientsockets.items():
+                self._logger.warning("close socket for %s", str(key))
+                sock.close()
             serversocket.close()
             self.release()
             for key, dp in self._connections.items():
@@ -425,6 +430,8 @@ class ServerProcess(NodeProcess):
                     devname = pre.devname()
                     self._reconnecttimes[addr[0]] += 1
                     del self._mgrdict[addr[0]]
+                    client = self._clientsockets[addr[0]]
+                    client.close()
                 except:
                     self._logger.warning(traceback.format_exc())
                     pass
@@ -435,12 +442,13 @@ class ServerProcess(NodeProcess):
             mgrdict = multiprocessing.Manager().dict()
             dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
             self._connections[addr[0]] = dp
+            self._clientsockets[addr[0]] = clientsocket
             self._mgrdict[addr[0]] = mgrdict
             dp.start()
             #debug.
-            q = multiprocessing.active_children()
-            for i in q:
-                self._logger.info("in sever: %s %s", type(i), str(i))
+            #q = multiprocessing.active_children()
+            #for i in q:
+            #    self._logger.info("in sever: %s %s", type(i), str(i))
 
     def dpstatus(self):
         dps = dict()
