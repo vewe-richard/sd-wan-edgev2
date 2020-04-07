@@ -66,6 +66,21 @@ class VpnProcess(multiprocessing.Process):
             vpncfgobj.append(socket.inet_aton(i))
         return vpncfgpath, vpncfgobj
 
+    def bindport(self, sock, ip, port):
+        # try to use a specific source port get from the serverip and port
+        # then in server part, can judge whether should it accept connection from its source port
+        items = ip.split(".")
+        start = 10000 + 100*(int(items[3])%100) + port%100
+        for p in range(start, start + 10):
+            try:
+                sock.bind(("0.0.0.0", p))
+                self._logger.info("use source port %d for connection to %s:%d", p, ip, port)
+                break
+            except:
+                continue
+        else:
+            self._logger.warning("Can not find source port for connection to %s:%d", ip, port)
+
     def run2(self):
         self._macinfo = dict()
         infod = dict()
@@ -121,6 +136,7 @@ class VpnProcess(multiprocessing.Process):
                             continue
                 if create:
                     sock = stunsocket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.bindport(sock, k[0], int(k[1]))
                     sock.setblocking(0)
                     err = sock.connect_ex(k)
                     sock.init2()
@@ -277,7 +293,7 @@ class VpnProcess(multiprocessing.Process):
             r1 = sock.send(buf)
             r2 = sock.send(data)
         except:
-            self._logger.warning("dev data process, lost connection %s", traceback.format_exc())
+            self._logger.warning("dev data process, lost connection on (%s) %s", str(sock.getpair()), traceback.format_exc())
 
         pass
 
@@ -367,7 +383,7 @@ class VpnProcess(multiprocessing.Process):
             if v[0] == mac:
                 break
         else:
-            self._logger.info("Can not find socket form mac %s", binascii.hexlify(mac))
+            self._logger.info("Can not find socket from mac %s in %s", binascii.hexlify(mac), str(macinfo))
             return None
         try:
             return infod[k][0]
@@ -404,7 +420,7 @@ class VpnProcess(multiprocessing.Process):
                     s = (storeobj[0], storeobj[1])
                     self._macinfo[pair] = s
                     #self._logger.debug(str(storeobj))
-                    self._logger.debug("Mac record for %s, mac: %s, ip: %s", pair, binascii.hexlify(s[0]), binascii.hexlify(s[1]))
+                    self._logger.info("Mac record for %s, mac: %s, ip: %s", pair, binascii.hexlify(s[0]), binascii.hexlify(s[1]))
                 else:
                     self._logger.warning("ARP op unprocessed %d", op)
         elif eth_protocol == 0x0800: #IP packet
@@ -431,7 +447,7 @@ class VpnProcess(multiprocessing.Process):
             #self._logger.debug("netdataprocess IPV6, discard it")
             return
         else:
-            self._logger.warning("unprocessed protocol %s", hex(eth_protocol))
+            self._logger.warning("unprocessed protocol %s, smac %s, dmac %s", hex(eth_protocol), str(storeobj[0]), str(storeobj[1]))
             return
 
         r = dev.write(data)
