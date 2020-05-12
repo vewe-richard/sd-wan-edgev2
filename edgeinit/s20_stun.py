@@ -72,7 +72,7 @@ class DataProcess(multiprocessing.Process):
         self.shell(["ip", "link", "set", self._devname, "up"])
 
         if not self._bridge is None:
-            ret = self.shell(["brctl", "addif", self._bridge, self._devname])
+            ret = self.shell(["/sbin/brctl", "addif", self._bridge, self._devname])
             if ret != 0:
                 raise Exception("Can not add tap dev to bridge")
 
@@ -339,7 +339,7 @@ class ServerProcess(NodeProcess):
         if self._node["tunortap"] == "tap":  #need create bridge
             br = self.bridgename()
             self.releasebridge(br)
-            self.shell(["brctl", "addbr", br])
+            self.shell(["/sbin/brctl", "addbr", br])
             self.shell(["ip", "link", "set", br, "up"])
             ret = self.shell(["ip", "addr", "add", self._ip + "/24", "dev", br])
             if ret != 0:
@@ -353,7 +353,7 @@ class ServerProcess(NodeProcess):
         ret = self.shell(["ip", "link", "show", br])
         if ret == 0:
             self.shell(["ip", "link", "set", br, "down"])
-            self.shell(["brctl", "delbr", br])
+            self.shell(["/sbin/brctl", "delbr", br])
 
     def release(self):
         if self._node["tunortap"] == "tap":  #need create bridge
@@ -477,9 +477,9 @@ class Http(HttpBase):
         if cfgfile is None:
             sp = subprocess.run(["ip", "netns", "identify"], stdout=subprocess.PIPE)
             for l in sp.stdout.splitlines():
-                ns = l.decode()
-                if len(ns) > 3:
-                    self._configpath = "/home/richard/PycharmProjects/sd-wan-env/configs/stun-" + ns + ".json"
+                ns = l.decode().strip()
+                if len(ns) > 0:
+                    self._configpath = str(Path.home()) + "/.sdwan/edgepoll/" + ns + "/stun.json"
                     break
             else:
                 self._configpath = str(Path.home()) + "/.sdwan/edgepoll/stun.json"
