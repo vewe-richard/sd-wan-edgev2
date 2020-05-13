@@ -657,4 +657,4 @@ class VpnProcess(multiprocessing.Process):
                 pass
             pass
         '''
-        self.shell(["netplan", "apply"])
+        self.shell(["/usr/sbin/netplan", "apply"])
