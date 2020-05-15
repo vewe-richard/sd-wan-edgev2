@@ -428,7 +428,7 @@ class ServerProcess(NodeProcess):
             '''
             #TODO, we may checck all connections, and check latest received time from mgrdict, and make decision whether
             #release it
-            devname = self.tuntapname(addr[0], 0, self._ip)
+            devname = self.tuntapname(addr[0], addr[1], self._ip)
 
             mgrdict = multiprocessing.Manager().dict()
             dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
