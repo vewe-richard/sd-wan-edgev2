@@ -281,25 +281,10 @@ class ClientProcess(NodeProcess):
 
         self._logger.warning("ClientProcess Exit")
 
-    def bindport(self, sock, port):
-        # try to use a specific source port according to the server port
-        # then in server part, can judge whether it should accept connection from a source port
-        start = 10000 + port%1000
-        for p in range(start, start + 10):
-            try:
-                sock.bind(("0.0.0.0", p))
-                self._logger.info("use source port %d for connection to port %d", p, port)
-                break
-            except:
-                continue
-        else:
-            self._logger.warning("Can not bind source port for connection to port %d", port)
-
     def run2(self):
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self._socket = s
-            self.bindport(s, self._port)
             s.connect((self._server, self._port))
             s.send(bytearray(b'\x13\x56'))
         except Exception as e:
@@ -335,7 +320,6 @@ class ServerProcess(NodeProcess):
     def __init__(self, node, logger, mgrdict, **kwargs):
         super().__init__(node, logger, mgrdict, **kwargs)
         self._connections = dict()
-        self._reconnecttimes = multiprocessing.Manager().dict()
         self._clientsockets = dict()
         if self._node["tunortap"] == "tap":  #need create bridge
             br = self.bridgename()
@@ -424,35 +408,54 @@ class ServerProcess(NodeProcess):
                 continue
             clientsocket.settimeout(0)
 
+            '''
             try:
-                pre = self._connections[addr[0]]
+                pre = self._connections[addr]
                 try:
                     pre.kill2()
                     pre.join(timeout=0.1)
                     pre.terminate()
                     pre.join(timeout=0.1)
                     devname = pre.devname()
-                    self._reconnecttimes[addr[0]] += 1
-                    del self._mgrdict[addr[0]]
-                    client = self._clientsockets[addr[0]]
+                    del self._mgrdict[addr]
+                    client = self._clientsockets[addr]
                     client.close()
                 except:
                     self._logger.warning(traceback.format_exc())
                     pass
             except: #create it self
-                devname = self.tuntapname(addr[0], 0, self._ip)
-                self._reconnecttimes[addr[0]] = 0
+                devname = self.tuntapname(addr, 0, self._ip)
+            '''
+            #TODO, we may checck all connections, and check latest received time from mgrdict, and make decision whether
+            #release it
+            devname = self.tuntapname(addr[0], 0, self._ip)
 
             mgrdict = multiprocessing.Manager().dict()
             dp = DataProcess(self._logger, devname, clientsocket, mgrdict, bridge = self.bridgename())
-            self._connections[addr[0]] = dp
-            self._clientsockets[addr[0]] = clientsocket
-            self._mgrdict[addr[0]] = mgrdict
+            self._connections[addr] = dp
+            self._clientsockets[addr] = clientsocket
+            self._mgrdict[addr] = mgrdict
             dp.start()
             #debug.
             #q = multiprocessing.active_children()
             #for i in q:
             #    self._logger.info("in sever: %s %s", type(i), str(i))
+
+    def tuntapname(self, ip1, port, ip2):
+        if self._node["tunortap"] == "tun":
+            prefix = "u."
+        else:
+            prefix = "a."
+        l = []
+        items = ip1.split(".")
+        l.append(int(items[1]))
+        l.append(int(items[2]))
+        l.append(int(items[3]))
+        items = ip2.split(".")
+        l.append(int(items[3]))
+        s1 = "".join("{:02x}".format(c) for c in l)
+        s1 += hex(port%256)
+        return prefix + s1
 
     def dpstatus(self):
         dps = dict()
@@ -463,7 +466,7 @@ class ServerProcess(NodeProcess):
                 try:
                     status = dict()
                     status["status"] = v["status"]
-                    status["reconnect"] = self._reconnecttimes[k]
+                    status["reconnect"] = 0
                     status["recv"] = v["recv"]
                     status["send"] = v["send"]
                     dps[k] = status
