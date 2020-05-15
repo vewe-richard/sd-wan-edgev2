@@ -301,6 +301,7 @@ class ClientProcess(NodeProcess):
             self._socket = s
             self.bindport(s, self._port)
             s.connect((self._server, self._port))
+            s.send(bytearray(b'\x13\x56'))
         except Exception as e:
             self._logger.warning("ClientProcess %s", traceback.format_exc())
             self._mgrdict["status"] = type(e).__name__ + ":" + str(e) + "-> Reconnecting"
@@ -403,23 +404,26 @@ class ServerProcess(NodeProcess):
             self._logger.info("ServerProcess(%s) Exit", self._ip)
             pass
 
-    #
-    def invalid_source_port(self, serverport, sourceport):
-        start = 10000 + serverport%1000
-        if sourceport < start or sourceport >= (start + 10):
-            self._logger.warning("the source port range should be %d ~ %d", start, start + 10)
-            return True
-        return False
-
-
     def loop(self, serversocket):
         while True:
             clientsocket, addr = serversocket.accept()
-            if self.invalid_source_port(self._port, addr[1]):
-                self._logger.warning("Mismatch connection from %s, server port is %s", str(addr), self._port)
+            self._logger.info("NodeProcess Accept: %s, %s", str(clientsocket), str(addr))
+
+            clientsocket.settimeout(5.0)
+            try:
+                buf = clientsocket.recv(2)
+                if len(buf) == 2 and buf.find(b'\x13\x56') == 0:
+                    self._logger.info("Correct connection")
+                else:
+                    self._logger.info("Incorrect connection")
+                    clientsocket.close()
+                    continue
+            except socket.timeout:
+                self._logger.info("Incorrect connection, can not get start bit")
                 clientsocket.close()
                 continue
-            self._logger.info("NodeProcess Accept: %s, %s", str(clientsocket), str(addr))
+            clientsocket.settimeout(0)
+
             try:
                 pre = self._connections[addr[0]]
                 try:

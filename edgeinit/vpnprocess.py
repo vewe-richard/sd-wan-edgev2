@@ -217,7 +217,7 @@ class VpnProcess(multiprocessing.Process):
                 #self._logger.info("%s: reconnect %s, status %s", str(pair), str(reconnect), status["status"])
                 if not reconnect and not status["status"] == "CONNECT":
                     try:
-                        f.send(bytearray(b'\0\0'))
+                        f.send(bytearray(b'\x13\x56'))
                         status["status"] = "CONNECT"
                         status["connect"] = time.time()
                         status["bytes"] = 0
