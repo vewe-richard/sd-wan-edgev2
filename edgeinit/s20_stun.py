@@ -454,7 +454,7 @@ class ServerProcess(NodeProcess):
         items = ip2.split(".")
         l.append(int(items[3]))
         s1 = "".join("{:02x}".format(c) for c in l)
-        s1 += hex(port%256)
+        s1 += hex(port)[2:]
         return prefix + s1
 
     def dpstatus(self):
