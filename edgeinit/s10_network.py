@@ -3,18 +3,9 @@ import subprocess
 from pathlib import Path
 import json
 
-class Http(HttpBase):
-    def start(self):
-        self._logger.info(__file__ + "  http start()")
-        pass
-
-    def post(self, msg):
-        self._logger.info(__file__ + " msg " + str(msg))
-        pass
-
 class Main(MainBase):
-    def start(self, cfgfile=None):
-        self._logger.info(__file__ + "   main start()")
+    def __init__(self, logger, cfgfile=None):
+        super().__init__(logger)
         if cfgfile is None:
             sp = subprocess.run(["ip", "netns", "identify"], stdout=subprocess.PIPE)
             for l in sp.stdout.splitlines():
@@ -31,10 +22,19 @@ class Main(MainBase):
             with open(self._configpath) as json_file:
                 self._data = json.load(json_file)
         except:
-            self._data = []
-            self._logger.error("no network config file, skip")
+            self._data = dict()
             return
 
+    def start(self):
+        try:
+            if not self._data["enable"]:
+                raise Exception("network not enable")
+        except:
+            self._logger.warning(self._configpath)
+            self._logger.warning("network is not enabled, skip")
+            return
+
+        self._logger.info(__file__ + "   main start()")
         brname = "epbr1"
         sp = subprocess.run(["ip", "link", "add", brname, "type", "bridge"])
         sp = subprocess.run(["ip", "link", "show", brname])
