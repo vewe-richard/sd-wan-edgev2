@@ -24,7 +24,13 @@ class S5GProcess(multiprocessing.Process):
             try:
                 self._logger.info(self._mgrdict["status"])
 
-                self._mgrdict["log"] = ""
+                log = self._mgrdict["log"]
+                idx = log.rfind("#")
+                if idx >= 0:
+                    self._mgrdict["log"] = log[idx:] + "#"
+                else:
+                    self._mgrdict["log"] += "#"
+
                 if self._mgrdict["status"] == "INIT":
                     self.connecting(h5g)
                     self._mgrdict["status"] = "CONNECTED"

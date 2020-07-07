@@ -37,9 +37,10 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 n = obj.name()
                 if len(n) < 1:
                     n = name
-                headline = "<h1>" + n + "</h1>"
+                headline = "<h1>" + n + "</h1><pre>"
                 response.write(headline.encode())
                 response.write(obj.status().encode())
+                response.write("</pre>".encode())
 
 
             self.wfile.write(response.getvalue())
