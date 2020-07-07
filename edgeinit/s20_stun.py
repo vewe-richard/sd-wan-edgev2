@@ -715,6 +715,12 @@ class Http(HttpBase):
 
         return var
 
+    def name(self):
+        return "Tunnels"
+
+    def status(self):
+        return "Status"
+
 def parsestatus(data, logger):
     if type(data) is str:
         logger.info("Status error: %s", data)

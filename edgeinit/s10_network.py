@@ -3,6 +3,21 @@ import subprocess
 from pathlib import Path
 import json
 
+class Http(HttpBase):
+    def start(self):
+        self._logger.info(__file__ + "  http start()")
+        pass
+
+    def post(self, msg):
+        self._logger.info(__file__ + " msg " + str(msg))
+        pass
+
+    def status(self):
+        return "Status"
+
+    def name(self):
+        return "Network"
+
 class Main(MainBase):
     def __init__(self, logger, cfgfile=None):
         super().__init__(logger)
@@ -30,8 +45,8 @@ class Main(MainBase):
             if not self._data["enable"]:
                 raise Exception("network not enable")
         except:
-            self._logger.warning(self._configpath)
-            self._logger.warning("network is not enabled, skip")
+            self._logger.info(self._configpath)
+            self._logger.info("network is not enabled, skip")
             return
 
         self._logger.info(__file__ + "   main start()")

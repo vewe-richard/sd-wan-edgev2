@@ -22,6 +22,32 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
             mydict[ii[0]] = ii[1]
         return mydict
 
+    def do_GET(self):
+        self._logger.info("get http: " + self.path)
+        if "status" in self.path:
+            self.send_response(200)
+            self.send_header("Content-type", "text/html;charset=utf-8")
+            self.end_headers()
+            response = BytesIO()
+
+            for name, obj in self._inithandler.objs().items():
+                status = obj.status()
+                if len(status) < 1:
+                    continue
+                n = obj.name()
+                if len(n) < 1:
+                    n = name
+                headline = "<h1>" + n + "</h1>"
+                response.write(headline.encode())
+                response.write(obj.status().encode())
+
+
+            self.wfile.write(response.getvalue())
+            #self.wfile.write("hello world!!!".encode())
+        else:
+            self.send_response(400)
+            self.end_headers()
+
     def do_POST(self):
         content_length = int(self.headers['Content-Length'])
         body = self.rfile.read(content_length)

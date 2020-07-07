@@ -9,6 +9,12 @@ class HttpBase:
     def post(self, msg):
         pass
 
+    def status(self):
+        return ""
+
+    def name(self):
+        return ""
+
     def term(self):
         pass
 
