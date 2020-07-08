@@ -49,25 +49,64 @@ class S5GProcess(multiprocessing.Process):
 
     def connecting(self, h5g):
         h5g.write(b'AT$QCRMCALL=1,1\r')
-        out = h5g.read()
-        time.sleep(1)  #Sleep 1 (or inWaiting() may return incorrect value)
-        out += h5g.read(h5g.inWaiting())
+        time.sleep(1)
+        out = self.read(h5g)
+
+        h5g.write(b'AT+CREG?\r')
+        out += self.read(h5g)
+
+        h5g.write(b'AT\r')
+        out += self.read(h5g)
+
         ostr = out.decode()
 
         self._mgrdict["log"] += ostr
-        i = ostr.find("AT$QCRMCALL")
-        if i < 0:
-            raise Fail5GException("AT$QCRMCALL NO RESPONSE")
+        self._logger.info(ostr)
 
-        # len("AT$QCRMCALL=1,1\r\r\nERROR\r\n"): 25
-        lstr = ostr[i:(i + 25 + 1)]
-        if "OK" in lstr:
-            self._logger.info("Connect Done")
-            #run dhcp client
+        #check dhcclient return
+        if self.checkConnected(ostr):
+            self._logger.info("5G connected")
+            subprocess.run(["systemctl", "restart", "systemd-networkd"])
             return
-        raise Fail5GException("AT$QCRMCALL ERROR")
+        self._logger.info("5G not connected")
+        raise Fail5GException("Connecting failed")
+
+    def checkConnected(self, resp):
+        i = resp.find("+CREG:")
+        if i < 0:
+            self._logger.info("Can not find creg in response")
+            return False
+
+        lstr = resp[(i + len("+CREG:")):]
+        v = lstr.split("\r")
+        u = v[0].split(",")
+        if len(u) < 2:
+            self._logger.info("Wrong CREG Response")
+            return False
+
+        stat = int(u[1].strip())
+
+        self._logger.info("stat: " + str(stat))
+        if stat == 1:
+            return True
+        return False
 
     def monitoring(self, h5g):
+        h5g.write(b'AT+CREG?\r')
+        out = self.read(h5g)
+
+        h5g.write(b'AT\r')
+        out += self.read(h5g)
+
+        ostr = out.decode()
+
+        self._mgrdict["log"] += ostr
+
+        if self.checkConnected(ostr):
+            self._logger.info("5G keeping connected")
+        else:
+            self._logger.info("5G lost connected")
+            self._mgrdict["status"] = "INIT"
         pass
 
     def read(self, h5g):
@@ -84,9 +123,6 @@ class S5GProcess(multiprocessing.Process):
         out += self.read(h5g)
         h5g.write(b'AT+CSQ\r')
         out += self.read(h5g)
-
-        #self._logger.info(out)
-
         self._mgrdict["log"] += out.decode()
 
 class Http(HttpBase):
@@ -134,7 +170,7 @@ class Http(HttpBase):
             log = ""
 
         try:
-            return self._mgrdict["status"] + " " + log
+            return self._mgrdict["status"] + "\n" + log
         except Exception as e:
             return "Exception: " + str(e)
 
