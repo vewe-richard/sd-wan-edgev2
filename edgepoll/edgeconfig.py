@@ -35,6 +35,15 @@ class EdgeConfig:
         except Exception as e:
             raise Exception("Wrong edge config file: " + configfile)
 
+    def init_completed(self):
+        try:
+            return self._init_completed
+        except:
+            return False
+
+    def set_init_completed(self):
+        self._init_completed = True
+
     def loadedgeversion(self):
         with open("./version.json") as json_file:
             self._edgeversion = json.load(json_file)
