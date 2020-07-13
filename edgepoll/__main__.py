@@ -85,6 +85,7 @@ if __name__ == "__main__":
 
     #
     print("Main Block ...")
+    utils.led_set_value(3)
     poll.poll(logger)
     print("WARNING: Exit edgepoll")
 

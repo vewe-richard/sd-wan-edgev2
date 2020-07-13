@@ -177,6 +177,8 @@ def _poll(logger, myqueue, initHandler):
                         time.sleep(0.5)
                         utils.led_set_value(7)
                         time.sleep(0.5)
+                    utils.led_set_value(0)
+
             elif entry == "main":
                 obj = initHandler.obj(msg["module"])
                 obj.post(msg)

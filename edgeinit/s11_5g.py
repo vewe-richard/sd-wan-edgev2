@@ -5,6 +5,7 @@ import json
 import multiprocessing
 import time
 import serial
+from edgeutils import utils
 
 class Fail5GException(Exception):
     pass
