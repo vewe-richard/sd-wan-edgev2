@@ -102,6 +102,8 @@ def notifypoll(logger, myqueue):
     SimpleHTTPRequestHandler._queue = myqueue
     SimpleHTTPRequestHandler._logger = logger
     SimpleHTTPRequestHandler._inithandler = ih
+    mydict = {"entry": "mainself", "cmd": "initquery", "completed": True}
+    myqueue.put(mydict)
     try:
         httpd = HTTPServer(('', EdgeConfig.getInstance().inputport()), SimpleHTTPRequestHandler)
         httpd.serve_forever()
@@ -175,6 +177,13 @@ def _poll(logger, myqueue, initHandler):
             if entry == "mainself":
                 if msg["cmd"] == "pollnotify":
                     logger.debug("poll notifying")
+                elif msg["cmd"] == "initquery":
+                    ec.set_init_completed()
+                    for i in range(0, 4):
+                        utils.led_set_value(0)
+                        time.sleep(0.5)
+                        utils.led_set_value(7)
+                        time.sleep(0.5)
             elif entry == "main":
                 obj = initHandler.obj(msg["module"])
                 obj.post(msg)

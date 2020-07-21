@@ -33,3 +33,33 @@ def reportactionresult(sn, actionid, actiontype, returncode, astdout, astderr):
     mydict["stdout"] = astdout
     mydict["stderr"] = astderr
     return mydict
+
+def led_set_value(value):
+    bits = '{0:08b}'.format(value)
+    for i in range(0, 3):
+        if bits[(i + 1)*(-1)] == "1":
+            led(i, True)
+        else:
+            led(i, False)
+
+def led(pos, enable):
+    gpios = ["/sys/class/gpio/gpio461/value", "/sys/class/gpio/gpio511/value", "/sys/class/gpio/gpio462/value"]
+    #print(pos, enable)
+
+    try:
+        if enable:
+            v = 0
+        else:
+            v = 1
+        with open(gpios[pos], "w") as f:
+            f.write(str(v))
+        f.close()
+    except:
+        pass
+
+
+
+
+
+
+
