@@ -4,9 +4,56 @@ from pathlib import Path
 import json
 
 class Http(HttpBase):
+    def __init__(self, logger, cfgfile=None):
+        super().__init__(logger)
+        if cfgfile is None:
+            self._configpath = self.configpath() + "/network.json"
+        else:
+            self._configpath = cfgfile
+        try:
+            with open(self._configpath) as json_file:
+                self._data = json.load(json_file)
+        except:
+            self._data = dict()
+
     def start(self):
-        self._logger.info(__file__ + "  http start()")
+        try:
+            if not self._data["enable"]:
+                raise Exception("network not enable")
+        except:
+            self._logger.info(self._configpath)
+            self._logger.info("network is not enabled, skip")
+            return
+        try:
+            bridges = self._data["bridges"]
+        except Exception as e:
+            bridges = []
+        for bridge in bridges:
+            self.setup_bridge(bridge)
         pass
+
+    def setup_bridge(self, bridge):
+        try:
+            brname = bridge["name"]
+        except:
+            self._logger.info("Invalid bridge format")
+            return
+
+        try:
+            intfs = bridge["intfs"].split()
+        except:
+            intfs = []
+
+        sp = subprocess.run(["ip", "link", "show", brname])
+        if sp.returncode != 0:
+            self._logger.info(brname + " is not exist")
+            sp = subprocess.run(["ip", "link", "add", brname, "type", "bridge"])
+            if sp.returncode != 0:
+                self._logger.error("Can not create bridge")
+                return
+        for intf in intfs:
+            self._logger.info(intf)
+
 
     def post(self, msg):
         self._logger.info(__file__ + " msg " + str(msg))
@@ -19,36 +66,8 @@ class Http(HttpBase):
         return "Network"
 
 class Main(MainBase):
-    def __init__(self, logger, cfgfile=None):
-        super().__init__(logger)
-        if cfgfile is None:
-            sp = subprocess.run(["ip", "netns", "identify"], stdout=subprocess.PIPE)
-            for l in sp.stdout.splitlines():
-                ns = l.decode().strip()
-                if len(ns) > 0:
-                    self._configpath = str(Path.home()) + "/.sdwan/edgepoll/" + ns + "/network.json"
-                    break
-            else:
-                self._configpath = str(Path.home()) + "/.sdwan/edgepoll/network.json"
-        else:
-            self._configpath = cfgfile
-
-        try:
-            with open(self._configpath) as json_file:
-                self._data = json.load(json_file)
-        except:
-            self._data = dict()
-            return
-
     def start(self):
-        try:
-            if not self._data["enable"]:
-                raise Exception("network not enable")
-        except:
-            self._logger.info(self._configpath)
-            self._logger.info("network is not enabled, skip")
-            return
-
+        '''
         self._logger.info(__file__ + "   main start()")
         brname = "epbr1"
         sp = subprocess.run(["ip", "link", "add", brname, "type", "bridge"])
@@ -66,8 +85,10 @@ class Main(MainBase):
         sp = subprocess.run(["ip", "link", "set", brname, "up"])
         sp = subprocess.run(["ip", "address", "add", "192.168.2.1/24", "dev", brname])
         sp = subprocess.run(["systemctl", "restart", "isc-dhcp-server"])
+        sp = subprocess.run(["iptables", "-t", "nat", "-F", "POSTROUTING"])
         sp = subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "usb0", "-j", "MASQUERADE"])
         sp = subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "fm1-mac9", "-j", "MASQUERADE"])
+        '''
         pass
 
     def post(self, msg):
@@ -81,6 +102,9 @@ if __name__ == "__main__":
     logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     logger.debug("%s", str(sys.argv))
 
-    m = Main(logger)
-    m.start()
+    #m = Main(logger)
+    #m.start()
+    h = Http(logger)
+    h.start()
+
     pass

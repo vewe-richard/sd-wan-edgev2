@@ -482,14 +482,7 @@ class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
         super().__init__(logger)
         if cfgfile is None:
-            sp = subprocess.run(["ip", "netns", "identify"], stdout=subprocess.PIPE)
-            for l in sp.stdout.splitlines():
-                ns = l.decode().strip()
-                if len(ns) > 0:
-                    self._configpath = str(Path.home()) + "/.sdwan/edgepoll/" + ns + "/stun.json"
-                    break
-            else:
-                self._configpath = str(Path.home()) + "/.sdwan/edgepoll/stun.json"
+            self._configpath = self.configpath() + "/stun.json"
         else:
             self._configpath = cfgfile
         self._datapath = os.path.dirname(self._configpath)
@@ -500,7 +493,8 @@ class Http(HttpBase):
                 self._data = json.load(json_file)
         except:
             self._data = []
-            logger.info("Http loading config %s", traceback.format_exc())
+            #logger.info("Http loading config %s", traceback.format_exc())
+            logger.info(f"Can not load stun config file")
 
     def start(self):
         for node in self._data:
