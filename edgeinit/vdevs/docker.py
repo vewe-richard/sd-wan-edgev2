@@ -17,6 +17,7 @@ class Docker(BasevDev):
         self._image = image
         self._privileged = privileged
         self._envs = []
+        self._volumns = []
         pass
 
     def exist(self):
@@ -40,6 +41,8 @@ class Docker(BasevDev):
             cmd.append("--privileged")
         for env in self._envs:
             cmd.extend(["--env", env])
+        for v in self._volumns:
+            cmd.extend(["-v", v])
         cmd.append(self._image)
         self._logger.info(cmd)
         sp = subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
@@ -49,6 +52,9 @@ class Docker(BasevDev):
 
     def addenv(self, envstr):
         self._envs.append(envstr)
+
+    def addvolumn(self, volumn):
+        self._volumns.append(volumn)
 
     def envs(self):
         return self._envs
@@ -67,8 +73,8 @@ class Docker(BasevDev):
         if not self.netns_exist():
             return
         self._logger.info(f"add intf {intf}")
-        sp = subprocess.run(["ip", "link", "set", intf, "netns", self.name()])
         sp = subprocess.run(["ip", "link", "set", intf, "up"])
+        sp = subprocess.run(["ip", "link", "set", intf, "netns", self.name()])
 
     def netns_exist(self):
         if os.path.islink(f'/var/run/netns/{self.name()}'):

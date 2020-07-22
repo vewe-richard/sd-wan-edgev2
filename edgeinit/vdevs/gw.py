@@ -16,6 +16,8 @@ class GW(Docker):
         sp = subprocess.run(["ip", "link", "add", "veth100", "type", "veth", "peer", "name", "pveth100"])
         self.addintf("veth100")
         docker.addintf("pveth100")
+        subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", "veth100", "master", "br0"])
+        subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", "veth100", "up"])
 
     def enablegw(self, ip):
         self.addenv(f'GWIP={ip}')
@@ -34,6 +36,7 @@ if __name__ == "__main__":
     print(gw.image())
     gw.enablegw("10.10.101.1/24")
     print(gw.envs())
+    gw.addvolumn("/home/richard/PycharmProjects/sd-wan-edgev2:/root/sd-wan-edgev2")
     gw.start()
     #gw.addintf("enp1s0")
     docker = Docker(logger, "ubuntu-test", image="jiangjqian/edgegate:ubuntu-net", privileged=True)

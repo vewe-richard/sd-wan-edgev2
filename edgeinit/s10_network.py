@@ -11,10 +11,18 @@ import subprocess
 import json
 import time
 from pathlib import Path
+import os
 
 class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
         super().__init__(logger)
+
+        try:
+            ip = os.environ["GWIP"]
+            self.writeconfig(ip)
+        except:
+            pass
+
         if cfgfile is None:
             self._configpath = self.configpath() + "/network.json"
         else:
@@ -115,18 +123,18 @@ class Http(HttpBase):
                 return self.bridgedel(brname, intf)
             elif cmd == "newgateway":
                 ip = msg["ip"].replace("%2F", "/")
-                data = {"enable": True, "bridges": [{"name": "br0", "ip": ip}],
-                        "nat": "eth0", "dnsmasq": True}
-                return self.newgateway(data, ip)
+                return self.newgateway(ip)
             else:
                 return "Unknown Command"
         except Exception as e:
             return str(e)
 
-    def newgateway(self, data, ip):
-        self._logger.warning(data)
+    def writeconfig(self, ip):
+        data = {"enable": True, "bridges": [{"name": "br0", "ip": ip}],
+                "nat": "eth0", "dnsmasq": True}
         with open(f'{Path.home()}/.sdwan/edgepoll/network.json', 'w') as json_file:
             json.dump(data, json_file)
+
         # dnsmasq config
         '''        
         interface=br0
@@ -140,8 +148,11 @@ class Http(HttpBase):
             f.write(range)
             f.close()
 
+    def newgateway(self, ip):
+        self.writeconfig(ip)
+
         sp = subprocess.run(["ip", "address", "flush", "dev", "br0"])
-        sp = subprocess.run(["ip", "address", "add", f'{items[0]}.1/24', "dev", "br0"])
+        sp = subprocess.run(["ip", "address", "add", ip, "dev", "br0"])
         try:
             self._dnsmasq.terminate()
         except:
