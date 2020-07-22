@@ -8,7 +8,7 @@ import time
 
 class GW(Docker):
     def __init__(self, logger, name, memory=512, image=None):
-        super().__init__(logger, name, image="jiangjqian/edgegate:common", privileged=True)
+        super().__init__(logger, name, image="jiangjqian/edgegate:gatewaybase", privileged=True)
         self._type = "GW"
         pass
 
@@ -16,6 +16,9 @@ class GW(Docker):
         sp = subprocess.run(["ip", "link", "add", "veth100", "type", "veth", "peer", "name", "pveth100"])
         self.addintf("veth100")
         docker.addintf("pveth100")
+
+    def enablegw(self, ip):
+        self.addenv(f'GWIP={ip}')
 
 if __name__ == "__main__":
     import logging
@@ -29,10 +32,11 @@ if __name__ == "__main__":
     print(gw.type())
     print(gw.mem())
     print(gw.image())
+    gw.enablegw("10.10.101.1/24")
+    print(gw.envs())
     gw.start()
-
     #gw.addintf("enp1s0")
-    docker = Docker(logger, "ubuntu-test", image="jiangjqian/edgegate:common", privileged=True)
+    docker = Docker(logger, "ubuntu-test", image="jiangjqian/edgegate:ubuntu-net", privileged=True)
     docker.start()
 
     gw.adddocker(docker)

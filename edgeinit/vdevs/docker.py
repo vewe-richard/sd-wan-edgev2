@@ -16,6 +16,7 @@ class Docker(BasevDev):
         self._mem = memory
         self._image = image
         self._privileged = privileged
+        self._envs = []
         pass
 
     def exist(self):
@@ -37,12 +38,20 @@ class Docker(BasevDev):
         cmd.extend(["docker", "run", "--rm", "--name", self.name()])
         if self._privileged:
             cmd.append("--privileged")
+        for env in self._envs:
+            cmd.extend(["--env", env])
         cmd.append(self._image)
         self._logger.info(cmd)
         sp = subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
 
         self._proc = sp
         self._id = sp.pid
+
+    def addenv(self, envstr):
+        self._envs.append(envstr)
+
+    def envs(self):
+        return self._envs
 
     def stop(self):
         pass
@@ -59,6 +68,7 @@ class Docker(BasevDev):
             return
         self._logger.info(f"add intf {intf}")
         sp = subprocess.run(["ip", "link", "set", intf, "netns", self.name()])
+        sp = subprocess.run(["ip", "link", "set", intf, "up"])
 
     def netns_exist(self):
         if os.path.islink(f'/var/run/netns/{self.name()}'):
@@ -82,8 +92,8 @@ class Docker(BasevDev):
                 os.symlink(f'/proc/{pid}/ns/net', f'/var/run/netns/{self.name()}')
                 break
             except Exception as e:
-                self._logger.warning(traceback.format_exc())
-                self._logger.warning(f"Can not create network namespace for {self.name()}")
+                #self._logger.warning(traceback.format_exc())
+                self._logger.warning(f"Can not create network namespace for {self.name()}, waiting ...")
                 time.sleep(2)
                 continue
         pass
