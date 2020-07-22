@@ -10,6 +10,7 @@ from edgeinit.base import MainBase, HttpBase
 import subprocess
 import json
 import time
+from pathlib import Path
 
 class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
@@ -53,7 +54,7 @@ class Http(HttpBase):
 
     def setup_dnsmasq(self):
         sp = subprocess.Popen(["/usr/sbin/dnsmasq", "-k"])
-
+        self._dnsmasq = sp
         pass
 
     def setup_nats(self, nats):
@@ -112,10 +113,42 @@ class Http(HttpBase):
                 brname = msg["brname"]
                 intf = msg["intf"]
                 return self.bridgedel(brname, intf)
+            elif cmd == "newgateway":
+                ip = msg["ip"].replace("%2F", "/")
+                data = {"enable": True, "bridges": [{"name": "br0", "ip": ip}],
+                        "nat": "eth0", "dnsmasq": True}
+                self.newgateway(data, ip)
             else:
                 return "Unknown Command"
         except Exception as e:
             return str(e)
+
+    def newgateway(self, data, ip):
+        self._logger.warning(data)
+        with open(f'{Path.home()}/.sdwan/edgepoll/network.json', 'w') as json_file:
+            json.dump(data, json_file)
+        # dnsmasq config
+        '''        
+        interface=br0
+        dhcp-range = 192.168.1.100,192.168.1.150,24h
+        '''
+        items = ip.rsplit(".", maxsplit=1)
+        with open("/etc/dnsmasq.conf", "w") as f:
+            f.write("interface=br0\n")
+            range = f'dhcp-range={items[0]}.100,{items[0]}.150,24h\n'
+            self._logger.info(range)
+            f.write(range)
+            f.close()
+
+        sp = subprocess.run(["ip", "address", "flush", "dev", "br0"])
+        sp = subprocess.run(["ip", "address", "add", f'{items[0]}.1/24', "dev", "br0"])
+        try:
+            self._dnsmasq.terminate()
+        except:
+            pass
+        sp = subprocess.Popen(["/usr/sbin/dnsmasq", "-k"])
+        self._dnsmasq = sp
+        return "OK"
 
     def bridgeadd(self, brname, intf):
         sp = subprocess.run(["ip", "link", "set", intf, "master", brname])
