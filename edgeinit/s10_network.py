@@ -1,7 +1,15 @@
+# test environment
+# cat /home/richard/.sdwan/edgepoll/network.json
+# {"enable": true, "bridges": [{"name": "br0", "intfs": "enp1s0 enp3s0", "ip": "10.100.0.30/24"}], "nat": "enp1s0 usb0"}
+# export PYTHONPATH=$PWD && python3 edgeinit/s10_network.py
+# or
+# run edgepoll/__main__.py
+# and run testhttppost.py to test post a command to network
+#
 from edgeinit.base import MainBase, HttpBase
 import subprocess
-from pathlib import Path
 import json
+import time
 
 class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
@@ -30,7 +38,36 @@ class Http(HttpBase):
             bridges = []
         for bridge in bridges:
             self.setup_bridge(bridge)
+
+        try:
+            nats = self._data["nat"].split()
+            self.setup_nats(nats)
+        except:
+            pass
+
+        try:
+            if self._data["dnsmasq"]:
+                self.setup_dnsmasq()
+        except:
+            pass
+
+    def setup_dnsmasq(self):
+        sp = subprocess.Popen(["/usr/sbin/dnsmasq", "-k"])
+
         pass
+
+    def setup_nats(self, nats):
+        if len(nats) < 1:
+            return
+        sp = subprocess.run(["iptables", "-t", "nat", "-L", "POSTROUTING", "--line-numbers", "-v"], stdout=subprocess.PIPE)
+        lines = sp.stdout.decode().splitlines()
+        for nat in nats:
+            for l in lines:
+                if "MASQUERADE" in l and nat in l:
+                    print("exist:", l)
+                    break
+            else: #
+                subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", nat, "-j", "MASQUERADE"])
 
     def setup_bridge(self, bridge):
         try:
@@ -52,12 +89,47 @@ class Http(HttpBase):
                 self._logger.error("Can not create bridge")
                 return
         for intf in intfs:
-            self._logger.info(intf)
+            sp = subprocess.run(["ip", "link", "set", intf, "master", brname])
+            sp = subprocess.run(["ip", "link", "set", intf, "up"])
+
+        try:
+            ip = bridge["ip"]
+            sp = subprocess.run(["ip", "address", "add", ip, "dev", brname])
+        except:
+            pass
+        sp = subprocess.run(["ip", "link", "set", brname, "up"])
 
 
     def post(self, msg):
         self._logger.info(__file__ + " msg " + str(msg))
-        pass
+        try:
+            cmd = msg["cmd"]
+            if cmd == "bridgeadd":
+                brname = msg["brname"]
+                intf = msg["intf"]
+                return self.bridgeadd(brname, intf)
+            elif cmd == "bridgedel":
+                brname = msg["brname"]
+                intf = msg["intf"]
+                return self.bridgedel(brname, intf)
+            else:
+                return "Unknown Command"
+        except Exception as e:
+            return str(e)
+
+    def bridgeadd(self, brname, intf):
+        sp = subprocess.run(["ip", "link", "set", intf, "master", brname])
+        if sp.returncode == 0:
+            return "OK"
+        else:
+            return "NOK"
+
+    def bridgedel(self, brname, intf):
+        sp = subprocess.run(["ip", "link", "set", intf, "nomaster"])
+        if sp.returncode == 0:
+            return "OK"
+        else:
+            return "NOK"
 
     def status(self):
         return "Status"
@@ -67,28 +139,6 @@ class Http(HttpBase):
 
 class Main(MainBase):
     def start(self):
-        '''
-        self._logger.info(__file__ + "   main start()")
-        brname = "epbr1"
-        sp = subprocess.run(["ip", "link", "add", brname, "type", "bridge"])
-        sp = subprocess.run(["ip", "link", "show", brname])
-        if sp.returncode != 0:
-            self._logger.info(brname + " is not exist")
-            return
-        subif = ["fm1-mac2", "fm1-mac3", "fm1-mac5", "fm1-mac6"]
-        subif.extend(["fm1-mac4", "fm1-mac10"])  #these two interface can  not be used, however
-        for si in subif:
-            sp = subprocess.run(["ip", "link", "set", si, "master", brname])
-            if sp.returncode != 0:
-                self._logger.error("Can not add interface to bridge")
-            sp = subprocess.run(["ip", "link", "set", si, "up"])
-        sp = subprocess.run(["ip", "link", "set", brname, "up"])
-        sp = subprocess.run(["ip", "address", "add", "192.168.2.1/24", "dev", brname])
-        sp = subprocess.run(["systemctl", "restart", "isc-dhcp-server"])
-        sp = subprocess.run(["iptables", "-t", "nat", "-F", "POSTROUTING"])
-        sp = subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "usb0", "-j", "MASQUERADE"])
-        sp = subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "fm1-mac9", "-j", "MASQUERADE"])
-        '''
         pass
 
     def post(self, msg):
@@ -106,5 +156,9 @@ if __name__ == "__main__":
     #m.start()
     h = Http(logger)
     h.start()
-
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Break")
     pass
