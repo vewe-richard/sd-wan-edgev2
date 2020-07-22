@@ -117,7 +117,7 @@ class Http(HttpBase):
                 ip = msg["ip"].replace("%2F", "/")
                 data = {"enable": True, "bridges": [{"name": "br0", "ip": ip}],
                         "nat": "eth0", "dnsmasq": True}
-                self.newgateway(data, ip)
+                return self.newgateway(data, ip)
             else:
                 return "Unknown Command"
         except Exception as e:
@@ -148,6 +148,7 @@ class Http(HttpBase):
             pass
         sp = subprocess.Popen(["/usr/sbin/dnsmasq", "-k"])
         self._dnsmasq = sp
+        self.setup_nats(["eth0"])
         return "OK"
 
     def bridgeadd(self, brname, intf):
@@ -169,6 +170,12 @@ class Http(HttpBase):
 
     def name(self):
         return "Network"
+
+    def term(self):
+        try:
+            self._dnsmasq.terminate()
+        except:
+            pass
 
 class Main(MainBase):
     def start(self):
