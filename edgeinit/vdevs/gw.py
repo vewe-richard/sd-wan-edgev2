@@ -10,14 +10,24 @@ class GW(Docker):
     def __init__(self, logger, name, memory=512, image=None):
         super().__init__(logger, name, image="jiangjqian/edgegate:gatewaybase", privileged=True)
         self._type = "GW"
+        self._linkid = 1
         pass
 
+    def nextlinkid(self):
+        lid = self._linkid
+        self._linkid += 1
+        return lid
+
     def adddocker(self, docker):
-        sp = subprocess.run(["ip", "link", "add", "veth100", "type", "veth", "peer", "name", "pveth100"])
-        self.addintf("veth100")
-        docker.addintf("pveth100")
-        subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", "veth100", "master", "br0"])
-        subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", "veth100", "up"])
+        iname = f'e{self.id()}-{self.nextlinkid()}'
+        pname = "p" + iname
+        sp = subprocess.run(["ip", "link", "add", iname, "type", "veth", "peer", "name", pname])
+        self.addintf(iname)
+        docker.addintf(pname)
+        sp = subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", iname, "master", "br0"])
+        if sp.returncode != 0:
+            self._logger.warning("Can not add to br0")
+        subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", iname, "up"])
 
     def enablegw(self, ip):
         self.addenv(f'GWIP={ip}')

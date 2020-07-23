@@ -18,9 +18,10 @@ if __name__ == "__main__":
     #        "tunortap": "tap", "tunnelip": "10.139.47.1", "tunneltype": "ipsec", "remoteip": "10.129.101.99"}
 
     #opts = {"entry": "http", "module": "network", "cmd": "bridgeadd", "brname": "br0", "intf": "enp1s0"}
-    opts = {"entry": "http", "module": "network", "cmd": "newgateway", "ip": "10.100.20.1/24"}
+    #opts = {"entry": "http", "module": "network", "cmd": "newgateway", "ip": "10.100.20.1/24"}
+    opts = {"entry": "httpself", "cmd": "readycheck"}
 
-    #resp = utils.http_post("127.0.0.1", 11012, "/", opts)
-    resp = utils.http_post("172.17.0.2", 11012, "/", opts)
+    resp = utils.http_post("127.0.0.1", 11112, "/", opts)
+    #resp = utils.http_post("172.17.0.2", 11112, "/", opts)
     print(__file__, resp.getcode(), resp.read().decode("utf-8"))
     print("end")

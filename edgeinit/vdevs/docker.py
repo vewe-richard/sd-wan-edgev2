@@ -8,6 +8,7 @@ import time
 import pathlib
 import os
 import traceback
+from edgeutils import utils
 
 class Docker(BasevDev):
     def __init__(self, logger, name, memory=512, image=None, privileged=False):
@@ -18,6 +19,7 @@ class Docker(BasevDev):
         self._privileged = privileged
         self._envs = []
         self._volumns = []
+        self._ip = None
         pass
 
     def exist(self):
@@ -103,6 +105,24 @@ class Docker(BasevDev):
                 time.sleep(2)
                 continue
         pass
+
+    def ip(self):
+        if not self._ip is None:
+            return self._ip
+        sp = subprocess.run(["docker", "inspect", "--format", "'{{.NetworkSettings.IPAddress}}'", self.name()], stdout=subprocess.PIPE)
+        if sp.returncode != 0:
+            return
+        self._ip = sp.stdout.decode().strip()
+
+    def ready(self):
+        ip = self.ip()
+        if ip is None:
+            return False
+
+        opts = {"entry": "httpself", "cmd": "readycheck"}
+        resp = utils.http_post(ip, 11112, "/", opts)
+
+
 
 if __name__ == "__main__":
     import logging

@@ -72,7 +72,11 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 return
             # this is the message to this process self
             elif mydict["entry"] == "httpself":
-                pass
+                if mydict["cmd"] == "readycheck":
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(bytearray(b'OK'))
+                    return
             # this is the message to Http class in init scripts
             elif mydict["entry"] == "http":
                 obj = self._inithandler.obj(mydict["module"])
