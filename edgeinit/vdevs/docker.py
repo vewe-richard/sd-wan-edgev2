@@ -66,7 +66,7 @@ class Docker(BasevDev):
 
     def remove(self):
         self.netns_remove()
-        sp = subprocess.run(["docker", "stop", self.name()])
+        sp = subprocess.Popen(["docker", "stop", self.name()])
         pass
 
     def addintf(self, intf):
@@ -112,7 +112,7 @@ class Docker(BasevDev):
         sp = subprocess.run(["docker", "inspect", "--format", "'{{.NetworkSettings.IPAddress}}'", self.name()], stdout=subprocess.PIPE)
         if sp.returncode != 0:
             return
-        self._ip = sp.stdout.decode().strip()
+        self._ip = sp.stdout.decode().strip().strip("'")
 
 if __name__ == "__main__":
     import logging

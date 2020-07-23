@@ -6,6 +6,8 @@ from edgeinit.vdevs.docker import Docker
 import subprocess
 import time
 from edgeutils import utils
+import random
+import traceback
 
 class GW(Docker):
     def __init__(self, logger, name, memory=512, image=None):
@@ -20,12 +22,14 @@ class GW(Docker):
         return lid
 
     def adddocker(self, docker):
-        for i in range(0, 20):
-            if self.ready():
+        for i in range(0, 40):
+            if self.ready(i):
+                self._logger.info("Gateway get ready!")
                 break
             time.sleep(2)
-        iname = f'e{self.id()}-{self.nextlinkid()}'
-        pname = "p" + iname
+        rd = random.randint(100,999)
+        iname = f'e{docker.name()[0:6]}-{rd}'
+        pname = f'e{self.name()[0:6]}-{rd}'
         sp = subprocess.run(["ip", "link", "add", iname, "type", "veth", "peer", "name", pname])
         self.addintf(iname)
         docker.addintf(pname)
@@ -33,11 +37,27 @@ class GW(Docker):
         if sp.returncode != 0:
             self._logger.warning("Can not add to br0")
         subprocess.run(["ip", "netns", "exec", self.name(), "ip", "link", "set", iname, "up"])
+        return (iname, pname)
+
+    def bridge2(self, peer_gw):
+        #need wait peer_gw ready
+        for i in range(0, 40):
+            if peer_gw.ready(i):
+                self._logger.info("Gateway get ready")
+                break
+            time.sleep(2)
+
+        iname, pname = self.adddocker(peer_gw)
+        sp = subprocess.run(["ip", "netns", "exec", peer_gw.name(), "ip", "link", "set", pname, "master", "br0"])
+        if sp.returncode != 0:
+            self._logger.warning("Can not add to br0")
+        subprocess.run(["ip", "netns", "exec", peer_gw.name(), "ip", "link", "set", pname, "up"])
+        pass
 
     def enablegw(self, ip):
         self.addenv(f'GWIP={ip}')
 
-    def ready(self):
+    def ready(self, count):
         ip = self.ip()
         if ip is None:
             return False
@@ -48,9 +68,10 @@ class GW(Docker):
             if resp.getcode() == 200 and resp.read().decode("utf-8") == "OK":
                 return True
         except Exception as e:
-            self._logger.info(f'docker is not ready, exceptin {str(e)}')
+            self._logger.info(f'docker is not ready({ip}:{count}), exceptin {str(e)}')
+            self._logger.info(traceback.format_exc())
             return False
-        self._logger.info(f'docker is not ready, {resp.getcode()}, {resp.read().decode("utf-8")}')
+        self._logger.info(f'docker is not ready({ip}:{count}), {resp.getcode()}, {resp.read().decode("utf-8")}')
         return False
 
 if __name__ == "__main__":
@@ -83,6 +104,6 @@ if __name__ == "__main__":
         docker.remove()
         gw.remove()
         pass
-
+    time.sleep(2)
     print("end")
 
