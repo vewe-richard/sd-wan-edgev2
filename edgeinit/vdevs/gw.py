@@ -5,6 +5,7 @@
 from edgeinit.vdevs.docker import Docker
 import subprocess
 import time
+from edgeutils import utils
 
 class GW(Docker):
     def __init__(self, logger, name, memory=512, image=None):
@@ -19,6 +20,10 @@ class GW(Docker):
         return lid
 
     def adddocker(self, docker):
+        for i in range(0, 20):
+            if self.ready():
+                break
+            time.sleep(2)
         iname = f'e{self.id()}-{self.nextlinkid()}'
         pname = "p" + iname
         sp = subprocess.run(["ip", "link", "add", iname, "type", "veth", "peer", "name", pname])
@@ -31,6 +36,22 @@ class GW(Docker):
 
     def enablegw(self, ip):
         self.addenv(f'GWIP={ip}')
+
+    def ready(self):
+        ip = self.ip()
+        if ip is None:
+            return False
+
+        opts = {"entry": "httpself", "cmd": "readycheck"}
+        try:
+            resp = utils.http_post(ip, 11112, "/", opts)
+            if resp.getcode() == 200 and resp.read().decode("utf-8") == "OK":
+                return True
+        except Exception as e:
+            self._logger.info(f'docker is not ready, exceptin {str(e)}')
+            return False
+        self._logger.info(f'docker is not ready, {resp.getcode()}, {resp.read().decode("utf-8")}')
+        return False
 
 if __name__ == "__main__":
     import logging
