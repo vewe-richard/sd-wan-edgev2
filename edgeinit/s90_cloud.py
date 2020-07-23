@@ -50,6 +50,7 @@ class Http(HttpBase):
                 continue
 
             dev = None
+            self._logger.info(str(node))
             if t == "docker":
                 dev = self.start_docker(node)
             elif t == "gw":
@@ -71,14 +72,16 @@ class Http(HttpBase):
 
     def start_gw(self, node):
         try:
-            gw = GW(logger, node["name"])
+            gw = GW(self._logger, node["name"])
             try:
                 gw.enablegw(node["ip"])
-            except:
+            except Exception as e:
+                self._logger.warning(str(e))
                 pass
             gw.start()
             return gw
-        except:
+        except Exception as e:
+            self._logger.warning(str(e))
             pass
         return None
 
@@ -126,6 +129,7 @@ class Http(HttpBase):
     def term(self):
         for n, handle in self._nodes.items():
             handle.remove()
+        time.sleep(0.1)
         pass
 
 class Main(MainBase):
