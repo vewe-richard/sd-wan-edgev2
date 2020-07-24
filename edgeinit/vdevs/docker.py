@@ -20,6 +20,9 @@ class Docker(BasevDev):
         self._envs = []
         self._volumns = []
         self._ip = None
+        self._portsmap = []
+        self._dockerip = None
+        self._debug = False
         pass
 
     def exist(self):
@@ -43,14 +46,23 @@ class Docker(BasevDev):
             cmd.append("--privileged")
         for env in self._envs:
             cmd.extend(["--env", env])
+        for pm in self._portsmap:
+            cmd.extend(["-p", pm])
         for v in self._volumns:
             cmd.extend(["-v", v])
+        if self._dockerip:
+            cmd.extend(["--net", "mynet","--ip", self._dockerip])
+        if self._debug:
+            cmd.extend(["-v", "/home/richard/PycharmProjects/sd-wan-edgev2:/root/sd-wan-edgev2"])
         cmd.append(self._image)
         self._logger.info(cmd)
         sp = subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
 
         self._proc = sp
         self._id = sp.pid
+
+    def portsmap(self, pm):
+        self._portsmap.append(pm)
 
     def addenv(self, envstr):
         self._envs.append(envstr)
@@ -112,7 +124,26 @@ class Docker(BasevDev):
         sp = subprocess.run(["docker", "inspect", "--format", "'{{.NetworkSettings.IPAddress}}'", self.name()], stdout=subprocess.PIPE)
         if sp.returncode != 0:
             return
-        self._ip = sp.stdout.decode().strip().strip("'")
+        ip = sp.stdout.decode().strip().strip("'")
+        if len(ip) > 5:
+            self._ip = sp.stdout.decode().strip().strip("'")
+            return
+        #try another possible
+        sp = subprocess.run(["docker", "inspect", "--format", "'{{.NetworkSettings.Networks.mynet.IPAddress}}'", self.name()], stdout=subprocess.PIPE)
+        if sp.returncode != 0:
+            return
+        ip = sp.stdout.decode().strip().strip("'")
+        if len(ip) > 5:
+            self._ip = sp.stdout.decode().strip().strip("'")
+            return
+
+
+    def dockerip(self, ip):
+        self._dockerip = ip
+
+    def enabledebug(self, enable):
+        self._debug = enable
+
 
 if __name__ == "__main__":
     import logging

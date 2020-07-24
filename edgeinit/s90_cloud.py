@@ -52,38 +52,47 @@ class Http(HttpBase):
             dev = None
             self._logger.info(str(node))
             if t == "docker":
-                dev = self.start_docker(node)
+                dev = Docker(self._logger, name, image=node["image"], privileged=True)
+                self.start_docker_or_gw(dev, node)
             elif t == "gw":
-                dev = self.start_gw(node)
+                dev = GW(self._logger, name)
+                self.start_docker_or_gw(dev, node)
+
             if dev is None:
                 continue
 
             self._nodes[name] = dev
         pass
 
-    def start_docker(self, node):
+    def start_docker_or_gw(self, dev, node):
         try:
-            docker = Docker(self._logger, node["name"], image=node["image"], privileged=True)
-            docker.start()
-            return docker
-        except:
-            pass
-        return None
-
-    def start_gw(self, node):
-        try:
-            gw = GW(self._logger, node["name"])
-            try:
-                gw.enablegw(node["ip"])
-            except Exception as e:
-                self._logger.warning(str(e))
-                pass
-            gw.start()
-            return gw
+            ip = node["ip"]
+            dev.enablegw(ip)
         except Exception as e:
             self._logger.warning(str(e))
             pass
-        return None
+        try:
+            dev.dockerip(node["dockerip"])
+        except Exception as e:
+            self._logger.warning(str(e))
+            pass
+        try:
+            debug = node["debug"]
+            dev.enabledebug(debug)
+        except:
+            pass
+        try:
+            vxlan = node["vxlan"]
+            dev.vxlan(vxlan)
+        except Exception as e:
+            self._logger.warning(str(e))
+        try:
+            dev.portsmap(node["portsmap"])
+        except Exception as e:
+            self._logger.warning(str(e))
+            pass
+        dev.start()
+
 
     def link_nodes(self, nodes):
         for node in nodes:

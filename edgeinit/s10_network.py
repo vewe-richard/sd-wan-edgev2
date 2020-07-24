@@ -33,6 +33,19 @@ class Http(HttpBase):
         except:
             self._data = dict()
 
+        try:
+            self._data["bridges"][0]["vxlan"]  #vxlan already exist, skip the env
+            return
+        except:
+            pass
+        try:
+            vxlan = os.environ["VXLAN"]
+            self._data["bridges"][0]["vxlan"] = vxlan
+            with open(f'{Path.home()}/.sdwan/edgepoll/network.json', 'w') as json_file:
+                json.dump(self._data, json_file)
+        except:
+            pass
+
     def start(self):
         try:
             if not self._data["enable"]:
@@ -101,11 +114,40 @@ class Http(HttpBase):
             sp = subprocess.run(["ip", "link", "set", intf, "master", brname])
             sp = subprocess.run(["ip", "link", "set", intf, "up"])
 
+        #vxlan
+        try:
+            info = bridge["vxlan"]
+            vxlans = info.split(",")
+            count = 0
+            for vxlan in vxlans:
+                items = vxlan.split(":")
+                if(len(items) < 3):
+                    continue
+                ifname = f'vxlan{count}'
+                count += 1
+                cmd = ["ip", "link", "add", ifname, "type", "vxlan", "id", items[2], "dstport", items[1], "remote", items[0]]
+                subprocess.run(cmd)
+                cmd = ["ip", "link", "set", ifname, "master", brname]
+                subprocess.run(cmd)
+                cmd = ["ip", "link", "set", ifname, "up"]
+                subprocess.run(cmd)
+                try:
+                    cmd = ["iptables", "-t", "nat", "-A", "PREROUTING", "-p", "udp", "--dport", items[1],
+                           "-d", items[0], "-j", "DNAT", "--to-destination", f'{items[0]}:{items[3]}']
+                    subprocess.run(cmd)
+                except Exception as e:
+                    self._logger.info(str(e))
+                    pass
+        except Exception as e:
+            self._logger.info(str(e))
+            pass
+
         try:
             ip = bridge["ip"]
             sp = subprocess.run(["ip", "address", "add", ip, "dev", brname])
         except:
             pass
+
         sp = subprocess.run(["ip", "link", "set", brname, "up"])
 
 
@@ -205,7 +247,7 @@ if __name__ == "__main__":
 
     #m = Main(logger)
     #m.start()
-    h = Http(logger)
+    h = Http(logger, cfgfile="/home/richard/PycharmProjects/sd-wan-edgev2/configs/network.json")
     h.start()
     try:
         while True:

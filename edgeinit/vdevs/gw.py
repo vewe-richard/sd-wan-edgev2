@@ -74,6 +74,29 @@ class GW(Docker):
         self._logger.info(f'docker is not ready({ip}:{count}), {resp.getcode()}, {resp.read().decode("utf-8")}')
         return False
 
+    def vxlan(self, cfg):
+        env = "VXLAN="
+        for vxlan in cfg:
+            try:
+                remote = vxlan["remote"]
+                dstport = vxlan["dstport"]
+            except Exception as e:
+                self._logger.warning(f'Can not enable vxlan for exception {e}')
+                continue
+            try:
+                vni = vxlan["vni"]
+            except:
+                vni = 42
+
+            try:
+                map = vxlan["map"]
+                self.portsmap(f'{map}:{dstport}/udp')
+                env += f'{remote}:{dstport}:{vni}:{map},'
+            except:
+                env += f'{remote}:{dstport}:{vni},'
+                pass
+        self.addenv(env[0:-1])
+
 if __name__ == "__main__":
     import logging
     import sys
