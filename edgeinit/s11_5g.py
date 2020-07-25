@@ -130,17 +130,9 @@ class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
         super().__init__(logger)
         if cfgfile is None:
-            sp = subprocess.run(["ip", "netns", "identify"], stdout=subprocess.PIPE)
-            for l in sp.stdout.splitlines():
-                ns = l.decode().strip()
-                if len(ns) > 0:
-                    self._configpath = str(Path.home()) + "/.sdwan/edgepoll/" + ns + "/5g.json"
-                    break
-            else:
-                self._configpath = str(Path.home()) + "/.sdwan/edgepoll/5g.json"
+            self._configpath = self.configpath() + "/5g.json"
         else:
             self._configpath = cfgfile
-
         try:
             with open(self._configpath) as json_file:
                 self._data = json.load(json_file)

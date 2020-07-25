@@ -10,6 +10,9 @@ from edgepoll.execute import Execute
 import subprocess
 from edgepoll.inithandler import InitHandler
 
+class InvalidSMSException(Exception):
+    pass
+
 class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
     _queue = None
     _logger = None
@@ -69,7 +72,11 @@ class SimpleHTTPRequestHandler(BaseHTTPRequestHandler):
                 return
             # this is the message to this process self
             elif mydict["entry"] == "httpself":
-                pass
+                if mydict["cmd"] == "readycheck":
+                    self.send_response(200)
+                    self.end_headers()
+                    self.wfile.write(bytearray(b'OK'))
+                    return
             # this is the message to Http class in init scripts
             elif mydict["entry"] == "http":
                 obj = self._inithandler.obj(mydict["module"])
@@ -153,12 +160,16 @@ def _poll(logger, myqueue, initHandler):
     exec = Execute(logger)
     while True:
         try:
+            if len(ec.sms().strip()) < 5:
+                raise InvalidSMSException("")
             resp = utils.http_post(ec.sms(), ec.smsport(), "/north/", {"CMD": "poll", "SN": ec.sn()})
             xmlstr = resp.read().decode()
             logger.debug("edge polling get response: %s", xmlstr)
             exec.run(xmlstr)
         except ConnectionRefusedError as e:
             logger.warning(e)
+        except InvalidSMSException:
+            pass
         except Exception as e:
             logger.error(traceback.format_exc())
 

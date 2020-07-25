@@ -1,0 +1,29 @@
+{
+  "nodes": [
+    {
+      "name": "AGVS",
+      "type": "docker",
+      "image": "jiangjqian/edgegate:ubuntu-net",
+      "net": ["vSW"],
+      "debug": true
+    },
+    {
+      "name": "vSW",
+      "type": "gw",
+      "image": "jiangjqian/edgegate:gatewaybase",
+      "dockerip": "172.18.0.80",
+      "vxlan": [{"remote": "172.18.0.180", "dstport": 4789, "vni": 42, "map": 14789}, {"remote": "172.18.0.190", "dstport": 4789, "vni":43, "map": 24789}],
+      "debug": true
+    },
+    {
+      "name": "vGW1046-10.10.20.1",
+      "type": "gw",
+      "image": "jiangjqian/edgegate:gatewaybase",
+      "ip": "10.10.20.1/24",
+      "dockerip": "172.18.0.180",
+      "vxlan": [{"remote": "172.18.0.80", "dstport": 4789, "vni": 42}],
+      "debug": true
+    }
+  ]
+
+}

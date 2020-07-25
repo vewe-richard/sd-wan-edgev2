@@ -7,7 +7,7 @@
   "sms": "127.0.0.1",
   "smsport": 8080,
   "publicip": "",
-  "inputport": 11012,
+  "inputport": 11112,
   "timeout": 6
 }
 
