@@ -27,13 +27,13 @@ class BasevDev():
         return self._id
 
     def start(self):
-        print("TODO")
+        self._logger.info("TODO")
 
     def stop(self):
-        print("TODO")
+        self._logger.info("TODO")
 
     def remove(self):
-        print("TODO")
+        self._logger.info("TODO")
 
     def addnet(self, net):
         self._nets.append(net)

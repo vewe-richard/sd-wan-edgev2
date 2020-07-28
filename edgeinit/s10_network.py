@@ -125,7 +125,7 @@ class Http(HttpBase):
                     continue
                 ifname = f'vxlan{count}'
                 count += 1
-                cmd = ["ip", "link", "add", ifname, "type", "vxlan", "id", items[2], "dstport", items[1], "remote", items[0]]
+                cmd = ["ip", "link", "add", ifname, "type", "vxlan", "id", items[2], "noudpcsum", "dstport", items[1], "remote", items[0]]
                 subprocess.run(cmd)
                 cmd = ["ip", "link", "set", ifname, "master", brname]
                 subprocess.run(cmd)

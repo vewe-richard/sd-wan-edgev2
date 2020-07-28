@@ -2,6 +2,15 @@
 # export PYTHONPATH=$PWD && python3 edgeinit/vdevs/vm.py
 # then, we can locate the guest from "ssh -p 10008 127.0.0.1"
 # to stop this, if control +c does not work, use kill -s SIGINT "pid of vm.py"
+# History:
+# 1. Can not work with kernel vxlan
+# Environment: two dockers in two different host, let's them link using kernel vxlan,
+# and through map to host, however, this only work on ping packet.
+# After,
+# echo 0 > /proc/sys/net/netfilter/nf_conntrack_checksum
+# it makes more udp packets pass through
+# it's suspected that the udp checksum error cause these issue
+# 2. Can not work with socketplane/openvswitch
 from edgeinit.vdevs.docker import Docker
 import subprocess
 import time
