@@ -14,6 +14,7 @@ import traceback
 from edgeinit.vdevs.docker import Docker
 from edgeinit.vdevs.gw import GW
 from edgeinit.vdevs.gw2 import GW2
+from edgeinit.vdevs.vm import VM
 
 class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
@@ -58,16 +59,18 @@ class Http(HttpBase):
                 dev = GW(self._logger, name)
             elif t == "gw2":
                 dev = GW2(self._logger, name)
+            elif t == "vm":
+                dev = VM(self._logger, name, image=node["image"])
             if dev is None:
                 continue
 
-            self.start_docker_or_gw(dev, node)
+            self.startdev(dev, node)
 
 
             self._nodes[name] = dev
         pass
 
-    def start_docker_or_gw(self, dev, node):
+    def startdev(self, dev, node):
         try:
             ip = node["ip"]
             dev.enablegw(ip)
@@ -96,6 +99,13 @@ class Http(HttpBase):
         except Exception as e:
             self._logger.warning(str(e))
             pass
+
+        try:
+            if dev.type() == "VM":
+                dev.declarenet(node["net"])
+        except:
+            pass
+
         dev.start()
         try:
             vxlan = node["vxlan"]
@@ -118,7 +128,10 @@ class Http(HttpBase):
                 try:
                     gw = self._nodes[net]
                     if gw.type() == "GW" or gw.type() == "GW2":
-                        gw.adddocker(dev)
+                        if dev.type() == "VM":
+                            gw.addVM(dev)
+                        else:
+                            gw.adddocker(dev)
                 except:
                     pass
 

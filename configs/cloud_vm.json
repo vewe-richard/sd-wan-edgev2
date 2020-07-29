@@ -2,23 +2,22 @@
   "nodes": [
     {
       "name": "AGVS",
-      "type": "docker",
-      "image": "jiangjqian/edgegate:ubuntu-net",
+      "type": "vm",
+      "image": "/var/lib/libvirt/images/ubuntu16.04-20190514-install-nested-kvm.qcow2",
       "net": ["vSW"]
     },
     {
       "name": "vSW",
       "type": "gw2",
       "image": "jiangjqian/edgegate:gatewaybase",
-      "vxlan": [{"remote": "192.168.0.11", "dstport": 4789, "vni": 42, "map": 14789}],
-      "debug": true
+      "bridgeto": ["vGW1046-10.10.20.1"]
     },
+
     {
       "name": "vGW1046-10.10.20.1",
       "type": "gw2",
       "image": "jiangjqian/edgegate:gatewaybase",
       "ip": "10.10.20.1/24",
-      "vxlan": [{"remote": "192.168.0.2", "dstport": 4789, "vni": 42}],
       "debug": true
     }
   ]

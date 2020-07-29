@@ -22,6 +22,7 @@ class VM(BasevDev):
         else:
             self._fwdport = fwdport
         self._proc = None
+        self._net2tap = dict()
         pass
 
     def fwdport(self):
@@ -88,10 +89,30 @@ class VM(BasevDev):
         cmd.extend(self.forwardport_params())
         cmd.extend(["-name", self.name()])
         cmd.append(self._image)
-        sp = subprocess.Popen(cmd, stdout=subprocess.DEVNULL)
+        for net in self.nets():
+            rand = random.randint(100, 999)
+            tapname = f't{self.name()[0:6]}-{net[0:1]}{rand}'
+            id = f'n{net[0:1]}{rand}'
+            self._net2tap[net] = tapname
+            extcmd = ["-netdev", f'tap,id={id},ifname={tapname}', "-device", f'e1000,netdev={id}']
+            self._logger.info(extcmd)
+            cmd.extend(extcmd)
+
+        sp = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stdin=subprocess.DEVNULL)
         self._proc = sp
         self._id = sp.pid
         pass
+
+    def declarenet(self, nets):
+        for net in nets:
+            self.addnet(net)
+
+    def nettotap(self, netname):
+        try:
+            return self._net2tap[netname]
+        except:
+            return None
+
 
 if __name__ == "__main__":
     import logging
@@ -107,6 +128,7 @@ if __name__ == "__main__":
     print(vm.image())
     print("port", vm.fwdport())
     print("exist", vm.exist())
+    vm.declarenet(["vSW", "Good"])
     vm.start()
 
     try:

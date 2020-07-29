@@ -62,6 +62,17 @@ class GW2(GW):
         docker.addintf(pname)
         return (iname, pname)
 
+    def addVM(self, vm):
+        tapname = vm.nettotap(self.name())
+        if tapname is None:
+            self._logger.error(f"can not find tapname from vm {vm.name()}, for net {self.name()}")
+            return
+
+        self._logger.info(f"addvm to gw {self.name()}, tapname {tapname}")
+        self.runcmd(["ovs-vsctl", "add-port", self._brname, tapname])
+        self.runcmd(["ip", "link", "set", tapname, "up"])
+        pass
+
     def bridge2(self, peer_gw):
         rd = random.randint(100,999)
         iname = f'e{peer_gw.name()[0:6]}-{rd}'
