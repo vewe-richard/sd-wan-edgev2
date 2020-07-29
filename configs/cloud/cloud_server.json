@@ -1,0 +1,24 @@
+{
+  "nodes": [
+    {
+      "name": "AGVS",
+      "type": "vm",
+      "image": "/home/richard/data/kvm/ubuntu16.04-20190514-install-nested-kvm.qcow2",
+      "net": ["vSW"]
+    },
+    {
+      "name": "ERP",
+      "type": "docker",
+      "image": "jiangjqian/edgegate:ubuntu-net",
+      "net": ["vSW"]
+    },
+    {
+      "name": "vSW",
+      "type": "gw2",
+      "image": "jiangjqian/edgegate:gatewaybase",
+      "vxlan": [{"remote": "192.168.0.11", "dstport": 4789, "vni": 42, "map": 14789}],
+      "debug": true
+    }
+  ]
+
+}
