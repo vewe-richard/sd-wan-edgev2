@@ -78,7 +78,7 @@ class GW(Docker):
                 return True
         except Exception as e:
             self._logger.info(f'docker is not ready({ip}:{count}), exceptin {str(e)}')
-            self._logger.info(traceback.format_exc())
+            #self._logger.info(traceback.format_exc())
             return False
         self._logger.info(f'docker is not ready({ip}:{count}), {resp.getcode()}, {resp.read().decode("utf-8")}')
         return False

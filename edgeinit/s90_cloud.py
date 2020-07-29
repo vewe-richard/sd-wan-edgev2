@@ -13,6 +13,7 @@ import time
 import traceback
 from edgeinit.vdevs.docker import Docker
 from edgeinit.vdevs.gw import GW
+from edgeinit.vdevs.gw2 import GW2
 
 class Http(HttpBase):
     def __init__(self, logger, cfgfile=None):
@@ -53,13 +54,15 @@ class Http(HttpBase):
             self._logger.info(str(node))
             if t == "docker":
                 dev = Docker(self._logger, name, image=node["image"], privileged=True)
-                self.start_docker_or_gw(dev, node)
             elif t == "gw":
                 dev = GW(self._logger, name)
-                self.start_docker_or_gw(dev, node)
-
+            elif t == "gw2":
+                dev = GW2(self._logger, name)
             if dev is None:
                 continue
+
+            self.start_docker_or_gw(dev, node)
+
 
             self._nodes[name] = dev
         pass
@@ -83,16 +86,23 @@ class Http(HttpBase):
             pass
         try:
             vxlan = node["vxlan"]
-            dev.vxlan(vxlan)
+            if dev.type() == "GW":
+                dev.vxlan(vxlan)
         except Exception as e:
             self._logger.warning(str(e))
+
         try:
             dev.portsmap(node["portsmap"])
         except Exception as e:
             self._logger.warning(str(e))
             pass
         dev.start()
-
+        try:
+            vxlan = node["vxlan"]
+            if dev.type() == "GW2":
+                dev.vxlan(vxlan)
+        except Exception as e:
+            self._logger.warning(str(e))
 
     def link_nodes(self, nodes):
         for node in nodes:
@@ -107,7 +117,7 @@ class Http(HttpBase):
             for net in nets:
                 try:
                     gw = self._nodes[net]
-                    if gw.type() == "GW":
+                    if gw.type() == "GW" or gw.type() == "GW2":
                         gw.adddocker(dev)
                 except:
                     pass
@@ -125,7 +135,7 @@ class Http(HttpBase):
             for net in nets:
                 try:
                     gw = self._nodes[net]
-                    if gw.type() == "GW":
+                    if gw.type() == "GW" or gw.type() == "GW2":
                         gw.bridge2(dev)
                 except:
                     pass

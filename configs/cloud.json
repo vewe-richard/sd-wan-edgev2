@@ -15,14 +15,14 @@
 
     {
       "name": "vSW",
-      "type": "gw",
+      "type": "gw2",
       "image": "jiangjqian/edgegate:gatewaybase",
-      "bridgeto": ["vGW1046-10.10.20.1"],
+      "bridgeto": ["vGW1046-10.10.20.1"]
     },
 
     {
       "name": "vGW1046-10.10.20.1",
-      "type": "gw",
+      "type": "gw2",
       "image": "jiangjqian/edgegate:gatewaybase",
       "ip": "10.10.20.1/24",
       "debug": true
@@ -32,8 +32,7 @@
       "name": "LWA",
       "type": "docker",
       "image": "jiangjqian/edgegate:ubuntu-net",
-      "net": ["vGW1046-10.10.20.1"],
-      "debug": true
+      "net": ["vGW1046-10.10.20.1"]
     }
   ]
 

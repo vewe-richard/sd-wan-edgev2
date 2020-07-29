@@ -20,7 +20,8 @@ class GW2(GW):
 
     def start(self):
         super(GW2, self).start()
-        self._brname = f'br-{self.name()}'
+        tstr = f'br-{self.name()}'
+        self._brname = tstr[0:12]
         ret = self.runcmd(["ovs-vsctl", "add-br", self._brname])
         if ret != 0:
             self._logger.error("Can not add bridge using openvswitch")
@@ -33,6 +34,11 @@ class GW2(GW):
         ret = self.runcmd(["ip", "link", "set", iname, "up"])
 
         self.addintf(pname)
+        for i in range(0, 20):
+            if self.ready(i):
+                break
+            time.sleep(2)
+
         ret = self.runcmd(["ip", "netns", "exec", self.name(), "ip", "link", "set", pname, "master", "br0"])
         if ret != 0:
             self._logger.error("Can not add link to docker bridge")
@@ -57,10 +63,40 @@ class GW2(GW):
         return (iname, pname)
 
     def bridge2(self, peer_gw):
+        rd = random.randint(100,999)
+        iname = f'e{peer_gw.name()[0:6]}-{rd}'
+        pname = f'e{self.name()[0:6]}-{rd}'
+        sp = subprocess.run(["ip", "link", "add", iname, "type", "veth", "peer", "name", pname])
+        sp = subprocess.run(["ovs-vsctl", "add-port", self._brname, iname])
+        sp = subprocess.run(["ovs-vsctl", "add-port", peer_gw.brname(), pname])
+        sp = subprocess.run(["ip", "link", "set", iname, "up"])
+        sp = subprocess.run(["ip", "link", "set", pname, "up"])
         pass
 
+    def brname(self):
+        return self._brname
+
     def vxlan(self, cfg):
-        pass
+        for vxlan in cfg:
+            try:
+                remote = vxlan["remote"]
+                dstport = vxlan["dstport"]
+            except Exception as e:
+                self._logger.warning(f'Can not enable vxlan for exception {e}')
+                continue
+            try:
+                vni = vxlan["vni"]
+            except:
+                vni = 42
+            rd = random.randint(10000000, 99999999)
+            name = f'v{rd}'
+
+            ret = self.runcmd(["ovs-vsctl", "add-port", self._brname, name,
+                            "--", "set", "interface", name, "type=vxlan",
+                            f'options:remote_ip={remote}', f'options:key={vni}', f'options:dst_port={dstport}'])
+            if ret != 0:
+                self._logger.error("Can not add vxlan port using openvswitch")
+
 
 if __name__ == "__main__":
     import logging
