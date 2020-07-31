@@ -150,7 +150,10 @@ class Http(HttpBase):
             self._logger.info(self._configpath)
             self._logger.info("5g is not enabled, skip")
             return
-
+        dev = Path("/dev/ttyUSB2")
+        if not dev.is_char_device():
+            self._logger.warn("/dev/ttyUSB2 is not exist")
+            return
         self._logger.info(__file__ + "   http start()")
         p = S5GProcess(self._logger, self._mgrdict)
         p.start()
@@ -181,7 +184,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=10, format="%(asctime)s - %(levelname)s: %(name)s{%(filename)s:%(lineno)s}\t%(message)s")
     logger.debug("%s", str(sys.argv))
 
-    h = Http(logger)
+    h = Http(logger, cfgfile="/home/richard/PycharmProjects/sd-wan-edgev2/configs/5g.json")
     h.start()
     while True:
         logger.info("main loop ")
