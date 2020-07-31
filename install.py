@@ -19,7 +19,7 @@ if __name__ == "__main__":
     with open("/lib/systemd/system/edgepoll.service", "w") as f:
         f.write(serviceFile)
     subprocess.run(["mkdir", "-p", "/etc/sdwan/edge/"])
-    subprocess.run(["cp", "config.json", "/etc/sdwan/edge/"])
+    subprocess.run(["cp", "configs/config.json", "/etc/sdwan/edge/"])
     subprocess.run(["systemctl", "disable", "edgepoll.service"])
     subprocess.run(["systemctl", "stop", "edgepoll.service"])
     subprocess.run(["systemctl", "daemon-reload"])

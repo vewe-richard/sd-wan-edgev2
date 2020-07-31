@@ -183,12 +183,12 @@ def _poll(logger, myqueue, initHandler):
                     logger.debug("poll notifying")
                 elif msg["cmd"] == "initquery":
                     ec.set_init_completed()
-                    for i in range(0, 4):
+                    for i in range(0, 3):
                         utils.led_set_value(0)
                         time.sleep(0.5)
                         utils.led_set_value(7)
                         time.sleep(0.5)
-                    utils.led_set_value(0)
+                    utils.led_set_value(1)
 
             elif entry == "main":
                 obj = initHandler.obj(msg["module"])

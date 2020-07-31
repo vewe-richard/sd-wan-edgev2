@@ -33,19 +33,6 @@ class Http(HttpBase):
         except:
             self._data = dict()
 
-        try:
-            self._data["bridges"][0]["vxlan"]  #vxlan already exist, skip the env
-            return
-        except:
-            pass
-        try:
-            vxlan = os.environ["VXLAN"]
-            self._data["bridges"][0]["vxlan"] = vxlan
-            with open(f'{Path.home()}/.sdwan/edgepoll/network.json', 'w') as json_file:
-                json.dump(self._data, json_file)
-        except:
-            pass
-
     def start(self):
         try:
             if not self._data["enable"]:
@@ -64,7 +51,9 @@ class Http(HttpBase):
         try:
             nats = self._data["nat"].split()
             self.setup_nats(nats)
-        except:
+        except Exception as e:
+            import traceback
+            self._logger.info(traceback.format_exc())
             pass
 
         try:
@@ -74,22 +63,22 @@ class Http(HttpBase):
             pass
 
     def setup_dnsmasq(self):
-        sp = subprocess.Popen(["/usr/sbin/dnsmasq", "-k"])
+        sp = self.popencmd(["/usr/sbin/dnsmasq", "-k"])
         self._dnsmasq = sp
         pass
 
     def setup_nats(self, nats):
         if len(nats) < 1:
             return
-        sp = subprocess.run(["iptables", "-t", "nat", "-L", "POSTROUTING", "--line-numbers", "-v"], stdout=subprocess.PIPE)
+        sp = self.runcmd(["iptables", "-t", "nat", "-L", "POSTROUTING", "--line-numbers", "-v"], stdout=subprocess.PIPE)
         lines = sp.stdout.decode().splitlines()
         for nat in nats:
             for l in lines:
                 if "MASQUERADE" in l and nat in l:
-                    print("exist:", l)
+                    self._logger.info(f"exist: {l}")
                     break
             else: #
-                subprocess.run(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", nat, "-j", "MASQUERADE"])
+                self.runcmd(["iptables", "-t", "nat", "-A", "POSTROUTING", "-o", nat, "-j", "MASQUERADE"])
 
     def setup_bridge(self, bridge):
         try:
@@ -103,52 +92,24 @@ class Http(HttpBase):
         except:
             intfs = []
 
-        sp = subprocess.run(["ip", "link", "show", brname])
+        sp = self.runcmd(["ip", "link", "show", brname])
         if sp.returncode != 0:
             self._logger.info(brname + " is not exist")
-            sp = subprocess.run(["ip", "link", "add", brname, "type", "bridge"])
+            sp = self.runcmd(["ip", "link", "add", brname, "type", "bridge"])
             if sp.returncode != 0:
                 self._logger.error("Can not create bridge")
                 return
         for intf in intfs:
-            sp = subprocess.run(["ip", "link", "set", intf, "master", brname])
-            sp = subprocess.run(["ip", "link", "set", intf, "up"])
-
-        #vxlan
-        try:
-            info = bridge["vxlan"]
-            vxlans = info.split(",")
-            count = 0
-            for vxlan in vxlans:
-                items = vxlan.split(":")
-                if(len(items) < 3):
-                    continue
-                ifname = f'vxlan{count}'
-                count += 1
-                cmd = ["ip", "link", "add", ifname, "type", "vxlan", "id", items[2], "noudpcsum", "dstport", items[1], "remote", items[0]]
-                subprocess.run(cmd)
-                cmd = ["ip", "link", "set", ifname, "master", brname]
-                subprocess.run(cmd)
-                cmd = ["ip", "link", "set", ifname, "up"]
-                subprocess.run(cmd)
-                try:
-                    cmd = ["iptables", "-t", "nat", "-A", "PREROUTING", "-p", "udp", "--dport", items[1],
-                           "-d", items[0], "-j", "DNAT", "--to-destination", f'{items[0]}:{items[3]}']
-                    subprocess.run(cmd)
-                except Exception as e:
-                    self._logger.info(str(e))
-                    pass
-        except Exception as e:
-            self._logger.info(str(e))
-            pass
+            sp = self.runcmd(["ip", "link", "set", intf, "master", brname])
+            sp = self.runcmd(["ip", "link", "set", intf, "up"])
 
         try:
             ip = bridge["ip"]
-            sp = subprocess.run(["ip", "address", "add", ip, "dev", brname])
+            sp = self.runcmd(["ip", "address", "add", ip, "dev", brname])
         except:
             pass
 
-        sp = subprocess.run(["ip", "link", "set", brname, "up"])
+        sp = self.runcmd(["ip", "link", "set", brname, "up"])
 
 
     def post(self, msg):
@@ -193,26 +154,26 @@ class Http(HttpBase):
     def newgateway(self, ip):
         self.writeconfig(ip)
 
-        sp = subprocess.run(["ip", "address", "flush", "dev", "br0"])
-        sp = subprocess.run(["ip", "address", "add", ip, "dev", "br0"])
+        sp = self.runcmd(["ip", "address", "flush", "dev", "br0"])
+        sp = self.runcmd(["ip", "address", "add", ip, "dev", "br0"])
         try:
             self._dnsmasq.terminate()
         except:
             pass
-        sp = subprocess.Popen(["/usr/sbin/dnsmasq", "-k"])
+        sp = self.popencmd(["/usr/sbin/dnsmasq", "-k"])
         self._dnsmasq = sp
         self.setup_nats(["eth0"])
         return "OK"
 
     def bridgeadd(self, brname, intf):
-        sp = subprocess.run(["ip", "link", "set", intf, "master", brname])
+        sp = self.runcmd(["ip", "link", "set", intf, "master", brname])
         if sp.returncode == 0:
             return "OK"
         else:
             return "NOK"
 
     def bridgedel(self, brname, intf):
-        sp = subprocess.run(["ip", "link", "set", intf, "nomaster"])
+        sp = self.runcmd(["ip", "link", "set", intf, "nomaster"])
         if sp.returncode == 0:
             return "OK"
         else:
@@ -229,6 +190,18 @@ class Http(HttpBase):
             self._dnsmasq.terminate()
         except:
             pass
+
+    def runcmd(self, cmd, stdout=None):
+        self._logger.info(str(cmd))
+        sp = subprocess.run(cmd, stdout=stdout)
+        #sp = subprocess.run(["echo"], stdout=stdout)
+        return sp
+
+    def popencmd(self, cmd, stdout=None):
+        self._logger.info(str(cmd))
+        sp = subprocess.Popen(cmd, stdout=stdout)
+        #sp = subprocess.run(["echo"], stdout=stdout)
+        return sp
 
 class Main(MainBase):
     def start(self):

@@ -1,3 +1,5 @@
 {"enable": true,
-  "bridges": [{"name": "br0", "ip": "10.10.30.1", "vxlan": "172.18.0.180:4789:42:14789,172.18.0.190:4789:43:24789"}],
-  "nat": "eth0", "dnsmasq": true}
+"bridges": [{"name": "br0", "ip": "10.10.20.1/24", "intfs": "fm1-mac2 fm1-mac3 fm1-mac4 fm1-mac5 fm1-mac6 fm1-mac10"}],
+"nat": "eth0", 
+"dnsmasq": true
+}
