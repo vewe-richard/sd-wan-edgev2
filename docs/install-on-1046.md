@@ -2,13 +2,32 @@
 
 ### Step 1: Run sd-wan-env/1046/setup.py
 ```
+replace us.ports to cn.ports in /etc/apt/source.list
 apt-get update
 apt install ntpdate  #"dpkg --configure -a" if any error
 ntpdate -s cn.pool.ntp.org
 
 git clone https://github.com/vewe-richard/sd-wan-env.git
-cd sd-wan-env
+cd sd-wan-env/1046
 python3 1046/setup.py
+
+replace with latest kernel Image, and kernel modules
+location: //server://home/richard/PycharmProjects/backup/
+
+# to be check, if the original openvswitch can not work, then do next 
+#python3 openvswitch-remove.py
+#apt install openvswitch-switch
+
+docker image
+first time:
+git clone https://gitee.com/vewe-richard/edgegate.git
+root@localhost:~/edgegate/dockers/base# docker pull ubuntu
+root@localhost:~/edgegate/dockers/base# docker build -t jiangjqian/edgegate:base ./
+root@localhost:~/edgegate/dockers/gateway# docker build -t jiangjqian/edgegate:gatewaybase ./
+
+else:
+use docker.tar in //server://home/richard/PycharmProjects/backup/
+
 ```
 
 Check:
